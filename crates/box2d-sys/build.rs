@@ -61,6 +61,9 @@ fn main() {
         b.file(here.join("src/shim.c"));
     }
     b.file(repo.join("src/c/box2d_glue.c"));
+    for area in ["bodies", "filters", "joints", "queries", "shapes"] {
+        b.file(repo.join(format!("src/c/box2d_glue_{area}.c")));
+    }
     b.compile("box2d");
 
     println!("cargo:rerun-if-env-changed=CARGO_ENCODED_RUSTFLAGS");

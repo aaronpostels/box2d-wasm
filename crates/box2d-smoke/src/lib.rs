@@ -33,8 +33,35 @@ fn state(ids: &[Body]) -> Vec<f32> {
     out
 }
 
+// One section per area. Each area's task fills in its own function; 0 means pass.
+fn shapes() -> i32 {
+    0
+}
+
+fn joints() -> i32 {
+    0
+}
+
+fn queries() -> i32 {
+    0
+}
+
+fn bodies() -> i32 {
+    0
+}
+
+fn filters() -> i32 {
+    0
+}
+
 #[no_mangle]
 pub extern "C" fn run() -> i32 {
+    for section in [shapes, joints, queries, bodies, filters] {
+        let code = section();
+        if code != 0 {
+            return code;
+        }
+    }
     let (w, ids) = build();
     unsafe {
         let mut events = 0;

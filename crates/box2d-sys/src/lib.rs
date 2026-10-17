@@ -7,6 +7,12 @@
 
 use core::ffi::c_void;
 
+pub mod bodies;
+pub mod filters;
+pub mod joints;
+pub mod queries;
+pub mod shapes;
+
 pub type World = u32;
 pub type Body = u64;
 pub type Shape = u64;
