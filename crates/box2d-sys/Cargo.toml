@@ -1,0 +1,21 @@
+[package]
+name = "box2d-sys"
+version = "0.1.0"
+edition = "2021"
+description = "Box2D (Erin Catto) compiled from C for wasm32-unknown-unknown, with a flat C glue API"
+license = "MIT"
+links = "box2d"
+build = "build.rs"
+
+[dependencies]
+rayon = { version = "1", optional = true }
+
+[features]
+# use_rayon: run Box2D's parallel work on the rayon pool
+rayon = ["dep:rayon"]
+
+[build-dependencies]
+cc = "1"
+
+[lib]
+path = "src/lib.rs"

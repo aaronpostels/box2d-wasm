@@ -1,0 +1,136 @@
+name: Build and Track Box2D Upstream
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Daily at 02:00 UTC: pull Erin Catto's upstream, build, test, commit the bump, publish a release
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Compile WASM and TypeScript
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      submodule-sha: ${{ steps.record-submodule.outputs.sha }}
+      submodule-changed: ${{ steps.record-submodule.outputs.changed }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Update Box2D Submodule (if scheduled/dispatched)
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: |
+          git submodule update --remote --merge vendor/box2d
+
+      - name: Record Tested Submodule SHA
+        id: record-submodule
+        run: |
+          SHA=$(git -C vendor/box2d rev-parse HEAD)
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          if ! git diff --quiet vendor/box2d; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build WASM (SIMD, scalar, threads) in the Emscripten image
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src emscripten/emsdk:4.0.18 bash -c \
+            "bash scripts/build.sh simd && bash scripts/build.sh scalar && bash scripts/build.sh threads"
+          sudo chown -R "$USER" dist
+
+      - name: Set up Node.js
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: 22.14.0
+
+      - name: Build TypeScript and smoke test
+        run: |
+          npm install --no-package-lock
+          npm run build:ts
+          npm test
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: box2d-wasm-dist
+          path: dist/
+          retention-days: 14
+
+  rust:
+    name: Rust crate on wasm32-unknown-unknown
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          submodules: recursive
+
+      - name: Install clang, llvm and the wasm target
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang llvm lld
+          rustup target add wasm32-unknown-unknown
+
+      - name: Build and run the smoke module
+        env:
+          CC_wasm32_unknown_unknown: clang
+          AR_wasm32_unknown_unknown: llvm-ar
+        run: |
+          cd crates/box2d-smoke
+          cargo build --target wasm32-unknown-unknown --release
+          node run.mjs
+
+  update-upstream:
+    name: Commit Upstream Submodule Updates
+    needs: build
+    if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && needs.build.outputs.submodule-changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Download Build
+        uses: actions/download-artifact@v4.1.8
+        with:
+          name: box2d-wasm-dist
+          path: dist/
+
+      - name: Commit Tested Submodule Revision
+        run: |
+          git -C vendor/box2d checkout ${{ needs.build.outputs.submodule-sha }}
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add vendor/box2d
+          git commit -m "chore(vendor): bump upstream box2d to ${{ needs.build.outputs.submodule-sha }}"
+          git push
+
+      - name: Publish Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SHORT=$(echo "${{ needs.build.outputs.submodule-sha }}" | cut -c1-9)
+          gh release create "box2d-$SHORT" dist/*.wasm dist/box2d*.js \
+            --title "Box2D $SHORT" \
+            --notes "Built from erincatto/box2d@${{ needs.build.outputs.submodule-sha }}. Files: box2d (SIMD), box2d.scalar, box2d.threads."

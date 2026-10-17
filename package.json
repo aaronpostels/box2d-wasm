@@ -1,0 +1,53 @@
+{
+  "name": "box2d-wasm",
+  "version": "0.1.0",
+  "description": "Box2D v3 (Erin Catto) as WebAssembly, rebuilt automatically from upstream. JS/TS wrapper and a Rust crate.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./wasm": "./dist/box2d.wasm",
+    "./raw": "./dist/box2d.js"
+  },
+  "files": [
+    "dist",
+    "src/c",
+    "src/ts",
+    "crates/box2d-sys",
+    "vendor/box2d/include",
+    "vendor/box2d/src",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY.md"
+  ],
+  "scripts": {
+    "build": "npm run build:wasm && npm run build:ts",
+    "build:wasm": "bash scripts/build.sh simd && bash scripts/build.sh scalar && bash scripts/build.sh threads",
+    "build:ts": "tsc",
+    "test": "node test/smoke.mjs && node test/snapshot.mjs",
+    "update:upstream": "git submodule update --remote --merge vendor/box2d"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  },
+  "keywords": [
+    "physics",
+    "2d",
+    "box2d",
+    "webassembly",
+    "wasm",
+    "simd",
+    "game-engine"
+  ],
+  "author": "Aaron",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aaronpostels/box2d-wasm.git"
+  }
+}

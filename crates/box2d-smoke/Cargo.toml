@@ -1,0 +1,15 @@
+[package]
+name = "box2d-smoke"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+box2d-sys = { path = "../box2d-sys" }
+
+[profile.release]
+opt-level = 3
+lto = true
