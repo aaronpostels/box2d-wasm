@@ -14,7 +14,16 @@ import {
     CapsuleShapeOptions,
     SegmentShapeOptions,
     PolygonShapeOptions,
-    RayHit2D
+    RayHit2D,
+    JointId,
+    WeldJointOptions,
+    RevoluteJointOptions,
+    PrismaticJointOptions,
+    DistanceJointOptions,
+    MotorJointOptions,
+    ContactPair,
+    SensorPair,
+    CharacterMoveResult
 } from "./types.js";
 
 export class Box2DWorld {
@@ -132,6 +141,38 @@ export class Box2DWorld {
         );
     }
 
+    public createPolygonShape(bodyId: BodyId, options: PolygonShapeOptions): ShapeId {
+        this.checkDestroyed();
+        const count = options.points.length;
+        if (count < 3) throw new Error("Box2DWorld.createPolygonShape: polygon requires at least 3 points.");
+        const floats = count * 2;
+        let bufPtr = this.scratchPtr;
+        let allocated = 0;
+        if (floats * 4 > 128) {
+            allocated = this.wasm._malloc(floats * 4);
+            bufPtr = allocated;
+        }
+        const f32 = this.getFloat32View();
+        const offset = bufPtr >> 2;
+        for (let i = 0; i < count; i++) {
+            f32[offset + i * 2] = options.points[i][0];
+            f32[offset + i * 2 + 1] = options.points[i][1];
+        }
+        const flags = options.sensor ? 1 : 0;
+        const shapeId = this.wasm._b2Glue_AddPolygon(
+            bodyId,
+            bufPtr,
+            count,
+            options.radius ?? 0.0,
+            options.density ?? 1.0,
+            options.friction ?? 0.6,
+            options.restitution ?? 0.0,
+            flags
+        );
+        if (allocated) this.wasm._free(allocated);
+        return shapeId;
+    }
+
     public destroyShape(shapeId: ShapeId, updateMass: boolean = true): void {
         this.checkDestroyed();
         this.wasm._b2Glue_DestroyShape(shapeId, updateMass);
@@ -191,6 +232,36 @@ export class Box2DWorld {
         this.wasm._b2Glue_ApplyAngularImpulse(bodyId, impulse, wake);
     }
 
+    public applyForceToCenter(bodyId: BodyId, force: Vec2Tuple, wake: boolean = true): void {
+        this.checkDestroyed();
+        this.wasm._b2Glue_ApplyForceToCenter(bodyId, force[0], force[1], wake);
+    }
+
+    public applyLinearImpulseToCenter(bodyId: BodyId, impulse: Vec2Tuple, wake: boolean = true): void {
+        this.checkDestroyed();
+        this.wasm._b2Glue_ApplyLinearImpulseToCenter(bodyId, impulse[0], impulse[1], wake);
+    }
+
+    public getBodyMass(bodyId: BodyId): number {
+        this.checkDestroyed();
+        return this.wasm._b2Glue_BodyMass(bodyId);
+    }
+
+    public setBodyMass(bodyId: BodyId, mass: number): void {
+        this.checkDestroyed();
+        this.wasm._b2Glue_SetBodyMass(bodyId, mass);
+    }
+
+    public isBodyAwake(bodyId: BodyId): boolean {
+        this.checkDestroyed();
+        return this.wasm._b2Glue_BodyIsAwake(bodyId) !== 0;
+    }
+
+    public getStateHash(): bigint {
+        this.checkDestroyed();
+        return this.wasm._b2Glue_StateHash(this.worldId);
+    }
+
     public syncBatchTransforms(bodyIds: ArrayLike<BodyId>, out: Float32Array): void {
         this.checkDestroyed();
         const count = bodyIds.length;
@@ -221,6 +292,218 @@ export class Box2DWorld {
             point: [f32[idx + 1], f32[idx + 2]],
             normal: [f32[idx + 3], f32[idx + 4]]
         };
+    }
+
+    public createWeldJoint(options: WeldJointOptions): JointId {
+        this.checkDestroyed();
+        const a = options.anchorA ?? [0, 0];
+        const b = options.anchorB ?? [0, 0];
+        const f32 = this.getFloat32View();
+        const idx = this.scratchPtr >> 2;
+        f32[idx] = a[0];
+        f32[idx + 1] = a[1];
+        f32[idx + 2] = b[0];
+        f32[idx + 3] = b[1];
+        return this.wasm._b2Glue_CreateWeld(
+            this.worldId,
+            options.bodyA,
+            options.bodyB,
+            this.scratchPtr,
+            this.scratchPtr + 8,
+            options.linearHertz ?? 0.0,
+            options.angularHertz ?? 0.0
+        );
+    }
+
+    public createRevoluteJoint(options: RevoluteJointOptions): JointId {
+        this.checkDestroyed();
+        const a = options.anchorA ?? [0, 0];
+        const b = options.anchorB ?? [0, 0];
+        const f32 = this.getFloat32View();
+        const idx = this.scratchPtr >> 2;
+        f32[idx] = a[0];
+        f32[idx + 1] = a[1];
+        f32[idx + 2] = b[0];
+        f32[idx + 3] = b[1];
+        const lim = options.limits;
+        return this.wasm._b2Glue_CreateRevolute(
+            this.worldId,
+            options.bodyA,
+            options.bodyB,
+            this.scratchPtr,
+            this.scratchPtr + 8,
+            lim ? 1 : 0,
+            lim ? lim[0] : 0,
+            lim ? lim[1] : 0
+        );
+    }
+
+    public createPrismaticJoint(options: PrismaticJointOptions): JointId {
+        this.checkDestroyed();
+        const a = options.anchorA ?? [0, 0];
+        const b = options.anchorB ?? [0, 0];
+        const ax = options.axis ?? [1, 0];
+        const f32 = this.getFloat32View();
+        const idx = this.scratchPtr >> 2;
+        f32[idx] = a[0];
+        f32[idx + 1] = a[1];
+        f32[idx + 2] = b[0];
+        f32[idx + 3] = b[1];
+        f32[idx + 4] = ax[0];
+        f32[idx + 5] = ax[1];
+        const lim = options.limits;
+        return this.wasm._b2Glue_CreatePrismatic(
+            this.worldId,
+            options.bodyA,
+            options.bodyB,
+            this.scratchPtr,
+            this.scratchPtr + 8,
+            this.scratchPtr + 16,
+            lim ? 1 : 0,
+            lim ? lim[0] : 0,
+            lim ? lim[1] : 0
+        );
+    }
+
+    public createDistanceJoint(options: DistanceJointOptions): JointId {
+        this.checkDestroyed();
+        const a = options.anchorA ?? [0, 0];
+        const b = options.anchorB ?? [0, 0];
+        const f32 = this.getFloat32View();
+        const idx = this.scratchPtr >> 2;
+        f32[idx] = a[0];
+        f32[idx + 1] = a[1];
+        f32[idx + 2] = b[0];
+        f32[idx + 3] = b[1];
+        return this.wasm._b2Glue_CreateDistance(
+            this.worldId,
+            options.bodyA,
+            options.bodyB,
+            this.scratchPtr,
+            this.scratchPtr + 8,
+            options.length ?? 1.0,
+            options.hertz ?? 0.0,
+            options.dampingRatio ?? 0.7
+        );
+    }
+
+    public createMotorJoint(options: MotorJointOptions): JointId {
+        this.checkDestroyed();
+        return this.wasm._b2Glue_CreateMotor(
+            this.worldId,
+            options.bodyA,
+            options.bodyB,
+            options.maxForce ?? 1000.0,
+            options.maxTorque ?? 1000.0
+        );
+    }
+
+    public destroyJoint(jointId: JointId): void {
+        this.checkDestroyed();
+        this.wasm._b2Glue_DestroyJoint(jointId);
+    }
+
+    public isJointValid(jointId: JointId): boolean {
+        this.checkDestroyed();
+        return this.wasm._b2Glue_JointIsValid(jointId) !== 0;
+    }
+
+    public moveCharacter(
+        selfShapeId: ShapeId,
+        position: Vec2Tuple,
+        halfHeight: number,
+        radius: number,
+        delta: Vec2Tuple,
+        groundNormalY: number = 0.7
+    ): CharacterMoveResult {
+        this.checkDestroyed();
+        const f32 = this.getFloat32View();
+        const idx = this.scratchPtr >> 2;
+        f32[idx] = position[0];
+        f32[idx + 1] = position[1];
+        f32[idx + 2] = delta[0];
+        f32[idx + 3] = delta[1];
+        const grounded = this.wasm._b2Glue_MoveCharacter(
+            this.worldId,
+            selfShapeId,
+            this.scratchPtr,
+            halfHeight,
+            radius,
+            this.scratchPtr + 8,
+            groundNormalY
+        );
+        return {
+            position: [f32[idx], f32[idx + 1]],
+            grounded: grounded !== 0
+        };
+    }
+
+    public getContactBeginEvents(maxEvents: number = 64): ContactPair[] {
+        this.checkDestroyed();
+        const buf = this.wasm._malloc(maxEvents * 16);
+        const count = this.wasm._b2Glue_ContactBeginEvents(this.worldId, buf, maxEvents);
+        const u64 = this.getBigUint64View();
+        const offset = buf >> 3;
+        const res: ContactPair[] = [];
+        for (let i = 0; i < count; i++) {
+            res.push({
+                shapeA: u64[offset + i * 2],
+                shapeB: u64[offset + i * 2 + 1]
+            });
+        }
+        this.wasm._free(buf);
+        return res;
+    }
+
+    public getContactEndEvents(maxEvents: number = 64): ContactPair[] {
+        this.checkDestroyed();
+        const buf = this.wasm._malloc(maxEvents * 16);
+        const count = this.wasm._b2Glue_ContactEndEvents(this.worldId, buf, maxEvents);
+        const u64 = this.getBigUint64View();
+        const offset = buf >> 3;
+        const res: ContactPair[] = [];
+        for (let i = 0; i < count; i++) {
+            res.push({
+                shapeA: u64[offset + i * 2],
+                shapeB: u64[offset + i * 2 + 1]
+            });
+        }
+        this.wasm._free(buf);
+        return res;
+    }
+
+    public getSensorBeginEvents(maxEvents: number = 64): SensorPair[] {
+        this.checkDestroyed();
+        const buf = this.wasm._malloc(maxEvents * 16);
+        const count = this.wasm._b2Glue_SensorBeginEvents(this.worldId, buf, maxEvents);
+        const u64 = this.getBigUint64View();
+        const offset = buf >> 3;
+        const res: SensorPair[] = [];
+        for (let i = 0; i < count; i++) {
+            res.push({
+                sensorShape: u64[offset + i * 2],
+                visitorShape: u64[offset + i * 2 + 1]
+            });
+        }
+        this.wasm._free(buf);
+        return res;
+    }
+
+    public getSensorEndEvents(maxEvents: number = 64): SensorPair[] {
+        this.checkDestroyed();
+        const buf = this.wasm._malloc(maxEvents * 16);
+        const count = this.wasm._b2Glue_SensorEndEvents(this.worldId, buf, maxEvents);
+        const u64 = this.getBigUint64View();
+        const offset = buf >> 3;
+        const res: SensorPair[] = [];
+        for (let i = 0; i < count; i++) {
+            res.push({
+                sensorShape: u64[offset + i * 2],
+                visitorShape: u64[offset + i * 2 + 1]
+            });
+        }
+        this.wasm._free(buf);
+        return res;
     }
 
     public destroy(): void {

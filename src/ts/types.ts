@@ -73,6 +73,64 @@ export interface PolygonShapeOptions {
     sensor?: boolean;
 }
 
+export interface WeldJointOptions {
+    bodyA: BodyId;
+    bodyB: BodyId;
+    anchorA?: Vec2Tuple;
+    anchorB?: Vec2Tuple;
+    linearHertz?: number;
+    angularHertz?: number;
+}
+
+export interface RevoluteJointOptions {
+    bodyA: BodyId;
+    bodyB: BodyId;
+    anchorA?: Vec2Tuple;
+    anchorB?: Vec2Tuple;
+    limits?: [number, number];
+}
+
+export interface PrismaticJointOptions {
+    bodyA: BodyId;
+    bodyB: BodyId;
+    anchorA?: Vec2Tuple;
+    anchorB?: Vec2Tuple;
+    axis?: Vec2Tuple;
+    limits?: [number, number];
+}
+
+export interface DistanceJointOptions {
+    bodyA: BodyId;
+    bodyB: BodyId;
+    anchorA?: Vec2Tuple;
+    anchorB?: Vec2Tuple;
+    length?: number;
+    hertz?: number;
+    dampingRatio?: number;
+}
+
+export interface MotorJointOptions {
+    bodyA: BodyId;
+    bodyB: BodyId;
+    maxForce?: number;
+    maxTorque?: number;
+}
+
+export interface ContactPair {
+    shapeA: ShapeId;
+    shapeB: ShapeId;
+}
+
+export interface SensorPair {
+    sensorShape: ShapeId;
+    visitorShape: ShapeId;
+}
+
+export interface CharacterMoveResult {
+    position: Vec2Tuple;
+    grounded: boolean;
+}
+
 export interface RawBox2DModule {
     HEAP8: Int8Array;
     HEAPU8: Uint8Array;
