@@ -85,11 +85,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y clang llvm lld
-          LLVM_AR=$(ls /usr/lib/llvm-*/bin/llvm-ar /usr/bin/llvm-ar-* 2>/dev/null | head -n 1)
-          if [ -n "$LLVM_AR" ]; then
-            sudo ln -sf "$LLVM_AR" /usr/bin/llvm-ar
-            sudo ln -sf "$LLVM_AR" /usr/local/bin/llvm-ar
-          fi
+          # the llvm package ships llvm-ar only under a versioned name
+          sudo ln -sf "$(ls /usr/lib/llvm-*/bin/llvm-ar | head -n 1)" /usr/local/bin/llvm-ar
           rustup target add wasm32-unknown-unknown
 
       - name: Build and run the smoke module
@@ -97,22 +94,9 @@ jobs:
           CC_wasm32_unknown_unknown: clang
           AR_wasm32_unknown_unknown: llvm-ar
         run: |
-          which clang
-          which llvm-ar
           cd crates/box2d-smoke
-          if ! cargo build --target wasm32-unknown-unknown --release --verbose 2>&1 | tee /tmp/cargo.log; then
-            ERR=$(tail -n 20 /tmp/cargo.log | tr '\n' ' ')
-            echo "::error title=Cargo Build Error::$ERR"
-            exit 101
-          fi
+          cargo build --target wasm32-unknown-unknown --release
           node run.mjs
-
-      - name: Upload Cargo Build Failure Log
-        if: failure()
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
-        with:
-          name: cargo-smoke-build-log
-          path: /tmp/cargo.log
 
   update-upstream:
     name: Commit Upstream Submodule Updates
