@@ -445,7 +445,9 @@ static bool collectPlanes(b2ShapeId shapeId, const b2PlaneResult* result, void* 
     if (B2_ID_EQUALS(shapeId, c->self)) return true;
     if (!result->hit) return true;
     if (c->count < GLUE_MAX_PLANES) {
-        c->planes[c->count++] = (b2CollisionPlane){ .plane = result->plane, .pushLimit = 1e30f, .push = 0.0f, .clipVelocity = true };
+        b2Plane p = result->plane;
+        p.offset += 0.006f;
+        c->planes[c->count++] = (b2CollisionPlane){ .plane = p, .pushLimit = 1e30f, .push = 0.0f, .clipVelocity = true };
     }
     return true;
 }
@@ -469,30 +471,19 @@ int b2Glue_MoveCharacter(uint32_t worldIdRaw, uint64_t selfShapeIdRaw, float* po
 
     MoverContext c;
     c.self = selfShape;
-    float target[2] = { pos2[0] + delta2[0], pos2[1] + delta2[1] };
-
-    // Settle first only when not rising (jumping/climbing)
-    if (delta2[1] <= 0.0f) {
-        gatherPlanes(w, &c, pos2, &cap);
-        if (c.count > 0) {
-            b2PlaneSolverResult s = b2SolvePlanes((b2Vec2){ 0.0f, 0.0f }, c.planes, c.count);
-            pos2[0] += s.delta.x;
-            pos2[1] += s.delta.y;
-        }
-    }
+    float targetX = pos2[0] + delta2[0];
+    float targetY = pos2[1] + delta2[1];
 
     for (int i = 0; i < 5; ++i) {
         gatherPlanes(w, &c, pos2, &cap);
-        b2Vec2 remaining = { target[0] - pos2[0], target[1] - pos2[1] };
-        b2Vec2 step = remaining;
-        if (c.count > 0) {
-            step = b2SolvePlanes(remaining, c.planes, c.count).delta;
-        }
-        if (b2LengthSquared(step) < 1e-10f) break;
-        float fraction = b2World_CastMover(w, (b2Vec2){ pos2[0], pos2[1] }, &cap, step, b2DefaultQueryFilter());
-        pos2[0] += step.x * fraction;
-        pos2[1] += step.y * fraction;
-        if (fraction >= 1.0f) break;
+        b2Vec2 remaining = { targetX - pos2[0], targetY - pos2[1] };
+        b2PlaneSolverResult res = b2SolvePlanes(remaining, c.planes, c.count);
+        if (b2LengthSquared(res.delta) < 1e-10f) break;
+        float fraction = b2World_CastMover(w, (b2Vec2){ pos2[0], pos2[1] }, &cap, res.delta, b2DefaultQueryFilter());
+        b2Vec2 step = { res.delta.x * fraction, res.delta.y * fraction };
+        pos2[0] += step.x;
+        pos2[1] += step.y;
+        if (b2LengthSquared(step) < 1e-6f) break;
     }
 
     int grounded = 0;
