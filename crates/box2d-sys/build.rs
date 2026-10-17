@@ -25,7 +25,6 @@ fn main() {
         b.define("B2_CPU_WASM", None);
         // libc headers last-resort first: our shims must win over any host headers clang might find.
         b.flag("-nostdlibinc").include(here.join("include/libc")).include(here.join("include/sse"));
-        b.file(here.join("src/shim.c"));
         // A module linked with --shared-memory (threads) wants every object built with atomics and bulk memory.
         let flags = std::env::var("CARGO_ENCODED_RUSTFLAGS").unwrap_or_default();
         if flags.contains("+atomics") {
@@ -59,6 +58,7 @@ fn main() {
         timer.compile("box2d_timer");
         platform.file(here.join("src/platform.c"));
         platform.compile("box2d_platform");
+        b.file(here.join("src/shim.c"));
     }
     b.file(repo.join("src/c/box2d_glue.c"));
     b.compile("box2d");

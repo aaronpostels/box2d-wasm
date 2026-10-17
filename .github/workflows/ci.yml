@@ -85,6 +85,12 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y clang llvm lld
+          if ! command -v llvm-ar >/dev/null 2>&1; then
+            LLVM_AR=$(ls /usr/lib/llvm-*/bin/llvm-ar /usr/bin/llvm-ar-* 2>/dev/null | head -n 1)
+            if [ -n "$LLVM_AR" ]; then
+              sudo ln -sf "$LLVM_AR" /usr/local/bin/llvm-ar
+            fi
+          fi
           rustup target add wasm32-unknown-unknown
 
       - name: Build and run the smoke module
@@ -92,8 +98,10 @@ jobs:
           CC_wasm32_unknown_unknown: clang
           AR_wasm32_unknown_unknown: llvm-ar
         run: |
+          which clang
+          which llvm-ar
           cd crates/box2d-smoke
-          cargo build --target wasm32-unknown-unknown --release
+          cargo build --target wasm32-unknown-unknown --release --verbose
           node run.mjs
 
   update-upstream:
