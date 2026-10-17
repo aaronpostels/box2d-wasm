@@ -494,9 +494,22 @@ int b2Glue_MoveCharacter(uint32_t worldIdRaw, uint64_t selfShapeIdRaw, float* po
             break;
         }
     }
+    if (!grounded) {
+        float probeDist = 0.02f;
+        float frac = b2World_CastMover(w, (b2Vec2){ pos2[0], pos2[1] }, &cap, (b2Vec2){ 0.0f, -probeDist }, b2DefaultQueryFilter());
+        if (frac < 1.0f) {
+            gatherPlanes(w, &c, (float[]){ pos2[0], pos2[1] - probeDist * frac }, &cap);
+            for (int i = 0; i < c.count; ++i) {
+                if (c.planes[i].plane.normal.y >= groundNormalY) {
+                    grounded = 1;
+                    break;
+                }
+            }
+        }
+    }
 
     // If blocked horizontally and walking, attempt autostep up to 0.3f
-    float remX = target[0] - pos2[0];
+    float remX = targetX - pos2[0];
     if (fabsf(remX) > 1e-4f && fabsf(delta2[0]) > 1e-4f) {
         float maxStep = 0.3f;
         float upFrac = b2World_CastMover(w, (b2Vec2){ pos2[0], pos2[1] }, &cap, (b2Vec2){ 0.0f, maxStep }, b2DefaultQueryFilter());
