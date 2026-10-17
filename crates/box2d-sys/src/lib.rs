@@ -28,8 +28,8 @@ pub const SHAPE_SENSOR: i32 = 1;
 pub const SHAPE_CONTACT_EVENTS: i32 = 2;
 pub const SHAPE_HIT_EVENTS: i32 = 4;
 
-/// Starts a task and returns a handle for `TaskFinish`.
-pub type TaskEnqueue = unsafe extern "C" fn(task: unsafe extern "C" fn(*mut c_void), ctx: *mut c_void, user: *mut c_void, name: *const core::ffi::c_char) -> *mut c_void;
+/// Starts a task and returns a handle for `TaskFinish`. Box2D v3 passes three arguments (Box3D passes a task name as a fourth).
+pub type TaskEnqueue = unsafe extern "C" fn(task: unsafe extern "C" fn(*mut c_void), ctx: *mut c_void, user: *mut c_void) -> *mut c_void;
 /// Blocks until the task behind the handle is done.
 pub type TaskFinish = unsafe extern "C" fn(handle: *mut c_void, user: *mut c_void);
 
@@ -137,17 +137,8 @@ pub fn use_rayon(world: World, workers: i32) {
     struct Job(unsafe extern "C" fn(*mut c_void), *mut c_void);
     unsafe impl Send for Job {}
 
-    unsafe extern "C" fn enqueue(task: unsafe extern "C" fn(*mut c_void), ctx: *mut c_void, _user: *mut c_void, _name: *const core::ffi::c_char) -> *mut c_void {
-        let mut name = [0u8; 16];
-        if !_name.is_null() {
-            for (i, slot) in name.iter_mut().enumerate().take(15) {
-                let c = unsafe { *(_name as *const u8).add(i) };
-                if c == 0 {
-                    break;
-                }
-                *slot = c;
-            }
-        }
+    unsafe extern "C" fn enqueue(task: unsafe extern "C" fn(*mut c_void), ctx: *mut c_void, _user: *mut c_void) -> *mut c_void {
+        let name = [0u8; 16]; // Box2D does not name its tasks
         let slot: &'static TaskSlot = Box::leak(Box::new(TaskSlot { done: AtomicBool::new(false), name }));
         let done = &slot.done;
         let job = Job(task, ctx);
