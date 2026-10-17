@@ -101,3 +101,8 @@ pub extern "C" fn run() -> i32 {
     }
     0
 }
+
+#[test]
+fn test_smoke() {
+    assert_eq!(run(), 0);
+}
