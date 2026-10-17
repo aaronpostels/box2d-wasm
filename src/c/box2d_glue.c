@@ -458,16 +458,27 @@ static void gatherPlanes(b2WorldId w, MoverContext* c, const float* pos, const b
 int b2Glue_MoveCharacter(uint32_t worldIdRaw, uint64_t selfShapeIdRaw, float* pos2, float halfHeight, float radius, const float* delta2, float groundNormalY) {
     b2WorldId w = worldOf(worldIdRaw);
     b2Capsule cap = { .center1 = { 0.0f, -halfHeight }, .center2 = { 0.0f, halfHeight }, .radius = radius };
+    b2ShapeId selfShape = shapeOf(selfShapeIdRaw);
+    b2Filter savedFilter = { 0 };
+    bool hasSelf = B2_IS_NON_NULL(selfShape) && b2Shape_IsValid(selfShape);
+    if (hasSelf) {
+        savedFilter = b2Shape_GetFilter(selfShape);
+        b2Filter noCollide = { 0 };
+        b2Shape_SetFilter(selfShape, noCollide);
+    }
+
     MoverContext c;
-    c.self = shapeOf(selfShapeIdRaw);
+    c.self = selfShape;
     float target[2] = { pos2[0] + delta2[0], pos2[1] + delta2[1] };
 
-    // Settle first
-    gatherPlanes(w, &c, pos2, &cap);
-    if (c.count > 0) {
-        b2PlaneSolverResult s = b2SolvePlanes((b2Vec2){ 0.0f, 0.0f }, c.planes, c.count);
-        pos2[0] += s.delta.x;
-        pos2[1] += s.delta.y;
+    // Settle first only when not rising (jumping/climbing)
+    if (delta2[1] <= 0.0f) {
+        gatherPlanes(w, &c, pos2, &cap);
+        if (c.count > 0) {
+            b2PlaneSolverResult s = b2SolvePlanes((b2Vec2){ 0.0f, 0.0f }, c.planes, c.count);
+            pos2[0] += s.delta.x;
+            pos2[1] += s.delta.y;
+        }
     }
 
     for (int i = 0; i < 5; ++i) {
@@ -484,12 +495,16 @@ int b2Glue_MoveCharacter(uint32_t worldIdRaw, uint64_t selfShapeIdRaw, float* po
         if (fraction >= 1.0f) break;
     }
 
+    int grounded = 0;
     gatherPlanes(w, &c, pos2, &cap);
     for (int i = 0; i < c.count; ++i) {
-        if (c.planes[i].plane.normal.y >= groundNormalY) return 1;
+        if (c.planes[i].plane.normal.y >= groundNormalY) {
+            grounded = 1;
+            break;
+        }
     }
 
-    // If blocked horizontally, attempt autostep up to 0.3f
+    // If blocked horizontally and walking, attempt autostep up to 0.3f
     float remX = target[0] - pos2[0];
     if (fabsf(remX) > 1e-4f && fabsf(delta2[0]) > 1e-4f) {
         float maxStep = 0.3f;
@@ -504,28 +519,27 @@ int b2Glue_MoveCharacter(uint32_t worldIdRaw, uint64_t selfShapeIdRaw, float* po
                 float stepY = liftY - downDist * downFrac;
                 // Verify landing is on ground
                 gatherPlanes(w, &c, (float[]){ stepX, stepY }, &cap);
-                bool grounded = false;
                 for (int i = 0; i < c.count; ++i) {
                     if (c.planes[i].plane.normal.y >= groundNormalY) {
-                        grounded = true;
+                        pos2[0] = stepX;
+                        pos2[1] = stepY;
+                        if (c.count > 0) {
+                            b2PlaneSolverResult s = b2SolvePlanes((b2Vec2){ 0.0f, 0.0f }, c.planes, c.count);
+                            pos2[0] += s.delta.x;
+                            pos2[1] += s.delta.y;
+                        }
+                        grounded = 1;
                         break;
                     }
-                }
-                if (grounded) {
-                    pos2[0] = stepX;
-                    pos2[1] = stepY;
-                    if (c.count > 0) {
-                        b2PlaneSolverResult s = b2SolvePlanes((b2Vec2){ 0.0f, 0.0f }, c.planes, c.count);
-                        pos2[0] += s.delta.x;
-                        pos2[1] += s.delta.y;
-                    }
-                    return 1;
                 }
             }
         }
     }
 
-    return 0;
+    if (hasSelf) {
+        b2Shape_SetFilter(selfShape, savedFilter);
+    }
+    return grounded;
 }
 
 // ---- Snapshots ----
