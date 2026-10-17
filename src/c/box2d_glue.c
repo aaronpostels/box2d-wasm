@@ -331,6 +331,7 @@ uint64_t b2Glue_CreatePrismatic(uint32_t worldIdRaw, uint64_t a, uint64_t b, con
     def.base.collideConnected = false;
     float angle = atan2f(axis2[1], axis2[0]);
     def.base.localFrameA.q = b2MakeRot(angle);
+    def.base.localFrameB.q = b2MakeRot(angle);
     if (limited) {
         def.enableLimit = true;
         def.lowerTranslation = lower;
@@ -487,6 +488,43 @@ int b2Glue_MoveCharacter(uint32_t worldIdRaw, uint64_t selfShapeIdRaw, float* po
     for (int i = 0; i < c.count; ++i) {
         if (c.planes[i].plane.normal.y >= groundNormalY) return 1;
     }
+
+    // If blocked horizontally, attempt autostep up to 0.3f
+    float remX = target[0] - pos2[0];
+    if (fabsf(remX) > 1e-4f && fabsf(delta2[0]) > 1e-4f) {
+        float maxStep = 0.3f;
+        float upFrac = b2World_CastMover(w, (b2Vec2){ pos2[0], pos2[1] }, &cap, (b2Vec2){ 0.0f, maxStep }, b2DefaultQueryFilter());
+        float liftY = pos2[1] + maxStep * upFrac;
+        if (liftY > pos2[1] + 0.01f) {
+            float hFrac = b2World_CastMover(w, (b2Vec2){ pos2[0], liftY }, &cap, (b2Vec2){ remX, 0.0f }, b2DefaultQueryFilter());
+            if (hFrac > 0.01f) {
+                float stepX = pos2[0] + remX * hFrac;
+                float downDist = (liftY - pos2[1]) + 0.05f;
+                float downFrac = b2World_CastMover(w, (b2Vec2){ stepX, liftY }, &cap, (b2Vec2){ 0.0f, -downDist }, b2DefaultQueryFilter());
+                float stepY = liftY - downDist * downFrac;
+                // Verify landing is on ground
+                gatherPlanes(w, &c, (float[]){ stepX, stepY }, &cap);
+                bool grounded = false;
+                for (int i = 0; i < c.count; ++i) {
+                    if (c.planes[i].plane.normal.y >= groundNormalY) {
+                        grounded = true;
+                        break;
+                    }
+                }
+                if (grounded) {
+                    pos2[0] = stepX;
+                    pos2[1] = stepY;
+                    if (c.count > 0) {
+                        b2PlaneSolverResult s = b2SolvePlanes((b2Vec2){ 0.0f, 0.0f }, c.planes, c.count);
+                        pos2[0] += s.delta.x;
+                        pos2[1] += s.delta.y;
+                    }
+                    return 1;
+                }
+            }
+        }
+    }
+
     return 0;
 }
 
