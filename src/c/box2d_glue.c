@@ -329,7 +329,7 @@ uint64_t b2Glue_CreatePrismatic(uint32_t worldIdRaw, uint64_t a, uint64_t b, con
     def.base.localFrameA.p = (b2Vec2){ anchorA2[0], anchorA2[1] };
     def.base.localFrameB.p = (b2Vec2){ anchorB2[0], anchorB2[1] };
     def.base.collideConnected = false;
-    float angle = atan2f(axis2[1], axis2[0]);
+    float angle = b2Atan2(axis2[1], axis2[0]);
     def.base.localFrameA.q = b2MakeRot(angle);
     def.base.localFrameB.q = b2MakeRot(angle);
     if (limited) {

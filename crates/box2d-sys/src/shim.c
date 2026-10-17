@@ -33,6 +33,8 @@ int fseek(FILE* f, long off, int whence) { (void)f; (void)off; (void)whence; ret
 long ftell(FILE* f) { (void)f; return -1; }
 
 float remainderf(float x, float y) { return x - y * __builtin_rintf(x / y); }
+float b2Atan2(float y, float x);
+float atan2f(float y, float x) { return b2Atan2(y, x); }
 
 int strcmp(const char* a, const char* b) {
     while (*a && *a == *b) { ++a; ++b; }
