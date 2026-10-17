@@ -18,5 +18,6 @@ size_t fwrite(const void* p, size_t size, size_t n, FILE* f);
 int fscanf(FILE* f, const char* fmt, ...);
 int fseek(FILE* f, long off, int whence);
 long ftell(FILE* f);
+int fflush(FILE* f);
 extern FILE* stdout;
 extern FILE* stderr;

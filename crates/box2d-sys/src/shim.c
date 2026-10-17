@@ -13,6 +13,7 @@ int printf(const char* fmt, ...) { (void)fmt; return 0; }
 int fprintf(FILE* f, const char* fmt, ...) { (void)f; (void)fmt; return 0; }
 int puts(const char* s) { (void)s; return 0; }
 int fscanf(FILE* f, const char* fmt, ...) { (void)f; (void)fmt; return -1; }
+int fflush(FILE* f) { (void)f; return 0; }
 
 int vsnprintf(char* buf, size_t n, const char* fmt, va_list ap) {
     (void)fmt; (void)ap;

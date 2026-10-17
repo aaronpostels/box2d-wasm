@@ -248,7 +248,7 @@ mod libc {
         n
     }
     #[no_mangle]
-    pub unsafe extern "C" fn strlen(s: *const u8) -> usize {
+    pub unsafe extern "C" fn strlen(s: *const core::ffi::c_char) -> usize {
         let mut n = 0;
         while *s.add(n) != 0 {
             n += 1;
