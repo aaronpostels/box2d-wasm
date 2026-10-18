@@ -61,10 +61,30 @@ uint64_t b2Glue_StateHash(uint32_t worldIdRaw) {
     return b2World_GetStateHash(worldOf(worldIdRaw));
 }
 
+// Serial task callbacks: what Box2D installs for a world with one worker. Box2D's own copies are static, so the glue keeps its own.
+static void* b2GlueSerialEnqueue(b2TaskCallback* task, void* taskContext, void* userContext) {
+    (void)userContext;
+    task(taskContext);
+    return NULL;
+}
+
+static void b2GlueSerialFinish(void* userTask, void* userContext) {
+    (void)userTask;
+    (void)userContext;
+}
+
 void b2Glue_SetTaskSystem(uint32_t worldIdRaw, int workers, b2EnqueueTaskCallback* enqueue, b2FinishTaskCallback* finish) {
     b2WorldId id = worldOf(worldIdRaw);
     b2World* w = b2GetWorldFromId(id);
-    if (w == NULL || workers < 2 || enqueue == NULL || finish == NULL) return;
+    if (w == NULL) return;
+    // Fewer than two workers, or no callbacks: back to serial. A later call with workers turns the split on again.
+    if (workers < 2 || enqueue == NULL || finish == NULL) {
+        w->enqueueTaskFcn = b2GlueSerialEnqueue;
+        w->finishTaskFcn = b2GlueSerialFinish;
+        w->userTaskContext = NULL;
+        b2World_SetWorkerCount(id, 1);
+        return;
+    }
     w->enqueueTaskFcn = enqueue;
     w->finishTaskFcn = finish;
     w->userTaskContext = NULL;
