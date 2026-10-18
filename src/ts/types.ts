@@ -4,6 +4,22 @@ export type WorldId = number;
 export type BodyId = bigint;
 export type ShapeId = bigint;
 export type JointId = bigint;
+export type ChainId = bigint;
+
+// b2JointType values, as returned by Box2DWorld.getJointType.
+export const JointType = {
+    Distance: 0,
+    Filter: 1,
+    Motor: 2,
+    Mover: 3,
+    Pogo: 4,
+    Prismatic: 5,
+    Revolute: 6,
+    Weld: 7,
+    Wheel: 8,
+} as const;
+
+export type JointTypeValue = typeof JointType[keyof typeof JointType];
 
 export const BodyType = {
     Static: 0,
@@ -131,6 +147,78 @@ export interface CharacterMoveResult {
     grounded: boolean;
 }
 
+export interface ChainShapeOptions {
+    points: Vec2Tuple[];
+    isLoop?: boolean; // closed loop (3+ points) or open one-sided chain (2+ points)
+    friction?: number;
+    restitution?: number;
+    rollingResistance?: number;
+    tangentSpeed?: number;
+}
+
+export interface ShapeFilter {
+    categoryBits: bigint;
+    maskBits: bigint;
+    groupIndex: number;
+}
+
+export interface MassData {
+    mass: number;
+    center: Vec2Tuple;
+    rotationalInertia: number;
+}
+
+// One query hit. Shape ids come back as bigint like every other id.
+export interface QueryHit {
+    shape: ShapeId;
+    fraction: number;
+    point: Vec2Tuple;
+    normal: Vec2Tuple;
+}
+
+// total counts every shape or hit, even when only the first maxResults are returned in shapes or hits.
+export interface OverlapResult {
+    total: number;
+    shapes: ShapeId[];
+}
+
+export interface RayAllResult {
+    total: number;
+    hits: QueryHit[];
+}
+
+export interface WheelJointOptions {
+    bodyA: BodyId;
+    bodyB: BodyId;
+    anchorA?: Vec2Tuple;
+    anchorB?: Vec2Tuple;
+    axis?: Vec2Tuple; // slide axis in frame A, default [1, 0]
+    spring?: { hertz: number; dampingRatio: number };
+    limits?: [number, number]; // translation limits along the axis
+    motor?: { speed: number; maxTorque: number };
+}
+
+// Mouse joint: a motor joint with a linear spring pulling anchorB towards target (world). Pass the ground body as bodyA.
+export interface MouseJointOptions {
+    bodyA: BodyId;
+    bodyB: BodyId;
+    target: Vec2Tuple;
+    anchorB?: Vec2Tuple;
+    maxForce?: number;
+    hertz?: number;
+    dampingRatio?: number;
+}
+
+export interface FilterJointOptions {
+    bodyA: BodyId;
+    bodyB: BodyId;
+}
+
+export interface JointReaction {
+    force: Vec2Tuple; // on body B, from the last step
+    torque: number;
+}
+
 export interface RawBox2DModule {
     HEAP8: Int8Array;
     HEAPU8: Uint8Array;
@@ -209,6 +297,66 @@ export interface RawBox2DModule {
     // Raycast & Character
     _b2Glue_CastRayClosest(worldId: number, originPtr2: number, translationPtr2: number, outPtr6: number): bigint;
     _b2Glue_MoveCharacter(worldId: number, selfShapeId: bigint, posPtr2: number, halfHeight: number, radius: number, deltaPtr2: number, groundNormalY: number): number;
+
+    // Shape properties, chains and filters
+    _b2Glue_ShapeSetFriction(shapeId: bigint, friction: number): void;
+    _b2Glue_ShapeFriction(shapeId: bigint): number;
+    _b2Glue_ShapeSetRestitution(shapeId: bigint, restitution: number): void;
+    _b2Glue_ShapeRestitution(shapeId: bigint): number;
+    _b2Glue_ShapeSetDensity(shapeId: bigint, density: number, updateBodyMass: boolean | number): void;
+    _b2Glue_ShapeDensity(shapeId: bigint): number;
+    _b2Glue_ShapeIsSensor(shapeId: bigint): number;
+    _b2Glue_ShapeSetRollingResistance(shapeId: bigint, rollingResistance: number): void;
+    _b2Glue_ShapeRollingResistance(shapeId: bigint): number;
+    _b2Glue_ShapeSetTangentSpeed(shapeId: bigint, tangentSpeed: number): void;
+    _b2Glue_ShapeTangentSpeed(shapeId: bigint): number;
+    _b2Glue_ShapeRadius(shapeId: bigint): number;
+    _b2Glue_AddChain(bodyId: bigint, points2: number, count: number, isLoop: boolean | number, friction: number, restitution: number, rollingResistance: number, tangentSpeed: number): bigint;
+    _b2Glue_ChainIsValid(chainId: bigint): number;
+    _b2Glue_ChainSegmentCount(chainId: bigint): number;
+    _b2Glue_SetShapeFilter(shapeId: bigint, categoryBits: bigint, maskBits: bigint, groupIndex: number): void;
+    _b2Glue_GetShapeFilter(shapeId: bigint, out2: number, outGroup: number): void;
+
+    // Body extras
+    _b2Glue_SetLinearDamping(bodyId: bigint, damping: number): void;
+    _b2Glue_GetLinearDamping(bodyId: bigint): number;
+    _b2Glue_SetAngularDamping(bodyId: bigint, damping: number): void;
+    _b2Glue_GetAngularDamping(bodyId: bigint): number;
+    _b2Glue_SetGravityScale(bodyId: bigint, scale: number): void;
+    _b2Glue_GetGravityScale(bodyId: bigint): number;
+    _b2Glue_SetFixedRotation(bodyId: bigint, fixed: boolean | number): void;
+    _b2Glue_GetFixedRotation(bodyId: bigint): number;
+    _b2Glue_GetMassData(bodyId: bigint, out4: number): void;
+    _b2Glue_SetMassData(bodyId: bigint, in4: number): void;
+    _b2Glue_SetBodyUserData(bodyId: bigint, value: number): void;
+    _b2Glue_GetBodyUserData(bodyId: bigint): number;
+    _b2Glue_EnableBody(bodyId: bigint): void;
+    _b2Glue_DisableBody(bodyId: bigint): void;
+    _b2Glue_BodyIsEnabled(bodyId: bigint): number;
+    _b2Glue_ApplyLinearImpulseBatch(ids: number, count: number, impulses2: number, wake: boolean | number): void;
+    _b2Glue_ApplyAngularImpulseBatch(ids: number, count: number, angular1: number, wake: boolean | number): void;
+
+    // Joints: creation, kind, limits, springs, motors, reaction
+    _b2Glue_CreateWheel(worldId: number, a: bigint, b: bigint, anchorA2: number, anchorB2: number, axis2: number, enableSpring: boolean | number, hertz: number, dampingRatio: number, enableLimit: boolean | number, lower: number, upper: number, enableMotor: boolean | number, motorSpeed: number, maxMotorTorque: number): bigint;
+    _b2Glue_CreateMouse(worldId: number, ground: bigint, b: bigint, target2: number, anchorB2: number, maxForce: number, hertz: number, dampingRatio: number): bigint;
+    _b2Glue_CreateFilter(worldId: number, a: bigint, b: bigint): bigint;
+    _b2Glue_MouseSetTarget(jointId: bigint, x: number, y: number): number;
+    _b2Glue_JointType(jointId: bigint): number;
+    _b2Glue_JointSetLimits(jointId: bigint, lower: number, upper: number): number;
+    _b2Glue_JointEnableLimit(jointId: bigint, enable: boolean | number): number;
+    _b2Glue_JointEnableSpring(jointId: bigint, enable: boolean | number): number;
+    _b2Glue_JointSetSpring(jointId: bigint, hertz: number, dampingRatio: number): number;
+    _b2Glue_JointEnableMotor(jointId: bigint, enable: boolean | number): number;
+    _b2Glue_JointSetMotor(jointId: bigint, speed: number, maxForce: number): number;
+    _b2Glue_JointReaction(jointId: bigint, out3: number): number;
+
+    // Queries
+    _b2Glue_CastShapeClosest(worldId: number, points2: number, count: number, radius: number, origin2: number, translation2: number, out: number): number;
+    _b2Glue_OverlapAABB(worldId: number, minX: number, minY: number, maxX: number, maxY: number, out: number, max: number): number;
+    _b2Glue_OverlapCircle(worldId: number, cx: number, cy: number, radius: number, out: number, max: number): number;
+    _b2Glue_OverlapPolygon(worldId: number, points2: number, count: number, radius: number, out: number, max: number): number;
+    _b2Glue_CastRayAll(worldId: number, origin2: number, translation2: number, out: number, max: number): number;
+    _b2Glue_Explode(worldId: number, px: number, py: number, radius: number, falloff: number, impulsePerLength: number, maskBits: bigint): void;
 
     // Snapshot
     _b2Glue_SnapshotSize(worldId: number): number;
