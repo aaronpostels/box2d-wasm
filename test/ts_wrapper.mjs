@@ -541,9 +541,9 @@ const beltTravel = (tangent) => {
 
   const ballA = dynamicCircle(w, 0, 3).body;
   const ballB = dynamicCircle(w, 10, 3).body;
-  const ballC = dynamicCircle(w, 20, 3).body;
-  const shapeBallC = w.createCircleShape(ballC, { radius: 0.5, density: 1, friction: 0.5 });
-  w.setShapeFilter(shapeBallC, { categoryBits: 1n, maskBits: ALL_BITS, groupIndex: -1 });
+  const circleC = dynamicCircle(w, 20, 3);
+  const ballC = circleC.body;
+  w.setShapeFilter(circleC.shape, { categoryBits: 1n, maskBits: ALL_BITS, groupIndex: -1 });
   steps(w, 120);
   assert.ok(pos(w, ballA)[1] < -5, "ball A falls through floor A");
   assert.ok(pos(w, ballC)[1] < -5, "ball C falls through floor C (same negative group)");
