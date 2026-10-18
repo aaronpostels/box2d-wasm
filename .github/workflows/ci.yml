@@ -52,6 +52,19 @@ jobs:
             "bash scripts/build.sh simd && bash scripts/build.sh scalar && bash scripts/build.sh threads"
           sudo chown -R "$USER" dist
 
+      - name: SIMD audit (SIMD build runs wasm SIMD ops, scalar build has none)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wabt
+          count() { wasm-objdump -d "$1" | grep -cE '\s(v128|[if](8|16|32|64)x[0-9]+)\.' || true; }
+          SIMD=$(count dist/box2d.wasm)
+          SCALAR=$(count dist/box2d.scalar.wasm)
+          THREADS=$(count dist/box2d.threads.wasm)
+          echo "wasm SIMD ops: simd=$SIMD scalar=$SCALAR threads=$THREADS"
+          test "$SIMD" -gt 0
+          test "$THREADS" -gt 0
+          test "$SCALAR" -eq 0
+
       - name: Set up Node.js
         uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
@@ -62,6 +75,9 @@ jobs:
           npm install --no-package-lock
           npm run build:ts
           npm test
+
+      - name: Threaded build test (pthreads flavour runs and matches the SIMD build)
+        run: node test/threads.mjs
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
