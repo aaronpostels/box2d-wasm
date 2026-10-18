@@ -48,6 +48,6 @@ else
 fi
 
 echo "Compiling with emcc..."
-emcc "${C_FLAGS[@]}" vendor/box2d/src/*.c src/c/box2d_glue.c "${LINK_FLAGS[@]}" -o "$OUT_FILE"
+emcc "${C_FLAGS[@]}" vendor/box2d/src/*.c src/c/box2d_glue.c src/c/box2d_glue_shapes.c src/c/box2d_glue_joints.c src/c/box2d_glue_queries.c src/c/box2d_glue_bodies.c src/c/box2d_glue_filters.c "${LINK_FLAGS[@]}" -o "$OUT_FILE"
 
 echo "Build successful: $OUT_FILE"
