@@ -17,12 +17,16 @@ Box2D tracks its `main` branch: a daily GitHub Actions job pulls upstream, build
 |---|---|
 | Bodies (static, kinematic, dynamic), circle / box / capsule / polygon / segment shapes | done |
 | Weld, revolute, prismatic, distance, motor joints | done |
+| Wheel, mouse, filter joints; limits, springs, motors; joint reaction forces | done (Rust smoke tested; `test/joints.mjs` runs after an Emscripten build; TypeScript wrapper methods `createWheelJoint`, `createMouseJoint`, `createFilterJoint`, `setJointLimits` / `enableJointSpring` / `setJointMotor` and kind-specific setters, `getJointReaction`; `test/ts_wrapper.mjs` runs after the build) |
 | Contact and sensor events, ray cast, character mover (capsule slide) | done |
+| Queries: shape cast, overlap (AABB, circle, polygon), all-hits ray cast, explosion | done (Rust smoke run; JS test needs the Emscripten build; TypeScript wrapper `castShapeClosest`, `overlapAABB` / `overlapCircle` / `overlapPolygon`, `castRayAll`, `explode`) |
 | Batch read of body state (one call for all bodies) | done |
+| Body damping, gravity scale, fixed rotation, mass data, user data, enable/disable, batch impulses, shape filters (Rust smoke tested; TypeScript wrapper methods added, run by `test/ts_wrapper.mjs` after the build) | done |
 | Exact world snapshot and in-place restore (continues bit for bit) | done |
 | Deterministic state hash (`b2World_GetStateHash`) | done |
+| Shapes: rounded polygons, chain loops and one-sided chains, friction / restitution / density get and set, rolling resistance, tangent speed (sensor flag readable, not settable: Box2D fixes it at creation) | done (Rust smoke; TypeScript wrapper `createChainShape`, property get/set, `getShapeRadius`, `setShapeFilter` / `getShapeFilter`; JS test needs an Emscripten build) |
 | SIMD and scalar builds | tested |
-| Worker threads | Rust crate on a Rayon pool (`use_rayon`); threaded WASM build with Emscripten pthreads |
+| Worker threads | Rust crate on a Rayon pool (`use_rayon`); threaded WASM build with Emscripten pthreads. Gap: the JS wrapper has no task-system call, so the threaded build steps Box2D on one thread. `b2Glue_SetTaskSystem` needs C-side task callbacks that run on the pthread pool; the JS side cannot supply function pointers without a glue change |
 
 ## JS / TS
 
