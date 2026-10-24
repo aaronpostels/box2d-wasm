@@ -15,8 +15,12 @@ B2_GLUE_EXPORT void b2Glue_ShapeSetRestitution(uint64_t shapeIdRaw, float restit
 B2_GLUE_EXPORT float b2Glue_ShapeRestitution(uint64_t shapeIdRaw);
 B2_GLUE_EXPORT void b2Glue_ShapeSetDensity(uint64_t shapeIdRaw, float density, bool updateBodyMass);
 B2_GLUE_EXPORT float b2Glue_ShapeDensity(uint64_t shapeIdRaw);
-// Box2D has no runtime sensor toggle: a shape's sensor flag is fixed at creation (SHAPE_SENSOR).
 B2_GLUE_EXPORT bool b2Glue_ShapeIsSensor(uint64_t shapeIdRaw);
+// Box2D (vendored 3.x) has no runtime sensor setter: the flag is fixed when a shape is made. This makes the shape again
+// with the flag flipped and the same geometry, material, filter, density, event flags and user data, and returns the NEW
+// shape id (the old id is dead; the new shape is last in the body's shape list). Returns the old id when the flag already
+// has the wanted value, and 0 (nothing changed) for chain segments, which cannot be sensors.
+B2_GLUE_EXPORT uint64_t b2Glue_ShapeSetSensor(uint64_t shapeIdRaw, bool sensor);
 B2_GLUE_EXPORT void b2Glue_ShapeSetRollingResistance(uint64_t shapeIdRaw, float rollingResistance);
 B2_GLUE_EXPORT float b2Glue_ShapeRollingResistance(uint64_t shapeIdRaw);
 B2_GLUE_EXPORT void b2Glue_ShapeSetTangentSpeed(uint64_t shapeIdRaw, float tangentSpeed);

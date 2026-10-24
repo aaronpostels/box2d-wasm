@@ -553,4 +553,61 @@ const beltTravel = (tangent) => {
   console.log("ok ts filters: category, mask and group");
 }
 
+// Glue added after the first dist builds: runs once the dist is rebuilt (npm run build:wasm), skips until then.
+if (typeof wasm._b2Glue_SetMotionLocks === "function") {
+  const w = world();
+  const free = dynamicBox(w, 0, 10, 0.5);
+  const noY = dynamicBox(w, 5, 10, 0.5);
+  const noX = dynamicBox(w, 10, 10, 0.5);
+  w.setMotionLocks(noY, { linearX: false, linearY: true, angularZ: false });
+  w.setMotionLocks(noX, { linearX: true, linearY: false, angularZ: true });
+  assert.deepEqual(w.getMotionLocks(noY), { linearX: false, linearY: true, angularZ: false });
+  assert.equal(w.isFixedRotation(noX), true, "angular lock is fixed rotation");
+  w.setLinearVelocity(noX, [4, 0]);
+  w.setLinearVelocity(free, [4, 0]);
+  steps(w, 30);
+  assert.ok(Math.abs(pos(w, noY)[1] - 10) < 1e-3 && pos(w, free)[1] < 9.5, "y lock holds, free body falls");
+  assert.ok(Math.abs(pos(w, noX)[0] - 10) < 1e-3 && pos(w, free)[0] > 1.5, "x lock holds, free body drifts");
+  w.destroy();
+  console.log("ok ts motion locks");
+} else {
+  console.log("skip ts motion locks: dist lacks _b2Glue_SetMotionLocks");
+}
+if (typeof wasm._b2Glue_SetBullet === "function") {
+  for (const bullet of [false, true]) {
+    const w = new Box2DWorld(wasm, [0, 0], { sleep: false, continuous: true });
+    const ball = w.createBody({ type: BodyType.Dynamic, position: [0, 0] });
+    w.createCircleShape(ball, { radius: 0.1, density: 1, friction: 0, restitution: 0 });
+    const wall = w.createBody({ type: BodyType.Dynamic, position: [5, 0] });
+    w.createBoxShape(wall, { halfWidth: 0.05, halfHeight: 2, density: 1000, friction: 0 });
+    w.setBullet(ball, bullet);
+    assert.equal(w.isBullet(ball), bullet);
+    w.setLinearVelocity(ball, [600, 0]);
+    steps(w, 3);
+    const bx = pos(w, ball)[0], wx = pos(w, wall)[0];
+    assert.ok(bullet ? bx <= wx : bx > wx, `bullet=${bullet}: ball x ${bx}, wall x ${wx}`);
+    w.destroy();
+  }
+  console.log("ok ts bullet");
+} else {
+  console.log("skip ts bullet: dist lacks _b2Glue_SetBullet");
+}
+if (typeof wasm._b2Glue_ShapeSetSensor === "function") {
+  const w = world();
+  const platform = staticBody(w, 0, 0);
+  const solid = w.createBoxShape(platform, { halfWidth: 5, halfHeight: 0.5, density: 1, friction: 0.5 });
+  const ball = dynamicCircle(w, 0, 3).body;
+  steps(w, 120);
+  near(pos(w, ball)[1], 1.0, 0.05, "ball rests on the solid platform");
+  assert.equal(w.setShapeSensor(solid, false), solid, "no change keeps the id");
+  const sensor = w.setShapeSensor(solid, true);
+  assert.ok(sensor !== null && w.isShapeSensor(sensor), "now a sensor");
+  steps(w, 120);
+  assert.ok(pos(w, ball)[1] < -5, "ball falls through the sensor");
+  w.destroy();
+  console.log("ok ts sensor toggle");
+} else {
+  console.log("skip ts sensor toggle: dist lacks _b2Glue_ShapeSetSensor");
+}
+
 console.log("ok ts wrapper: all new methods exercised");

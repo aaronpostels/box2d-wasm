@@ -41,6 +41,24 @@ bool b2Glue_GetFixedRotation(uint64_t bodyIdRaw) {
     return b2Body_GetMotionLocks(bodyOfRaw(bodyIdRaw)).angularZ;
 }
 
+void b2Glue_SetMotionLocks(uint64_t bodyIdRaw, int bits) {
+    b2MotionLocks locks = { .linearX = (bits & 1) != 0, .linearY = (bits & 2) != 0, .angularZ = (bits & 4) != 0 };
+    b2Body_SetMotionLocks(bodyOfRaw(bodyIdRaw), locks);
+}
+
+int b2Glue_GetMotionLocks(uint64_t bodyIdRaw) {
+    b2MotionLocks l = b2Body_GetMotionLocks(bodyOfRaw(bodyIdRaw));
+    return (l.linearX ? 1 : 0) | (l.linearY ? 2 : 0) | (l.angularZ ? 4 : 0);
+}
+
+void b2Glue_SetBullet(uint64_t bodyIdRaw, bool bullet) {
+    b2Body_SetBullet(bodyOfRaw(bodyIdRaw), bullet);
+}
+
+bool b2Glue_IsBullet(uint64_t bodyIdRaw) {
+    return b2Body_IsBullet(bodyOfRaw(bodyIdRaw));
+}
+
 void b2Glue_GetMassData(uint64_t bodyIdRaw, float* out4) {
     b2MassData m = b2Body_GetMassData(bodyOfRaw(bodyIdRaw));
     out4[0] = m.mass;

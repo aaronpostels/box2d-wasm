@@ -45,6 +45,43 @@ bool b2Glue_ShapeIsSensor(uint64_t shapeIdRaw) {
     return b2Shape_IsSensor(shapeOf(shapeIdRaw));
 }
 
+uint64_t b2Glue_ShapeSetSensor(uint64_t shapeIdRaw, bool sensor) {
+    b2ShapeId old = shapeOf(shapeIdRaw);
+    if (b2Shape_IsSensor(old) == sensor) return shapeIdRaw;
+    b2ShapeType type = b2Shape_GetType(old);
+    if (type == b2_chainSegmentShape) return 0;
+
+    b2ShapeDef def = b2DefaultShapeDef();
+    def.userData = b2Shape_GetUserData(old);
+    def.material = b2Shape_GetSurfaceMaterial(old);
+    def.density = b2Shape_GetDensity(old);
+    def.filter = b2Shape_GetFilter(old);
+    def.isSensor = sensor;
+    def.enableSensorEvents = b2Shape_AreSensorEventsEnabled(old);
+    def.enableContactEvents = b2Shape_AreContactEventsEnabled(old);
+    def.enableHitEvents = b2Shape_AreHitEventsEnabled(old);
+    def.enablePreSolveEvents = b2Shape_ArePreSolveEventsEnabled(old);
+
+    b2BodyId body = b2Shape_GetBody(old);
+    b2Circle circle; b2Capsule capsule; b2Segment segment; b2Polygon polygon;
+    switch (type) {
+    case b2_circleShape: circle = b2Shape_GetCircle(old); break;
+    case b2_capsuleShape: capsule = b2Shape_GetCapsule(old); break;
+    case b2_segmentShape: segment = b2Shape_GetSegment(old); break;
+    case b2_polygonShape: polygon = b2Shape_GetPolygon(old); break;
+    default: return 0;
+    }
+    b2DestroyShape(old, false);
+    b2ShapeId made;
+    switch (type) {
+    case b2_circleShape: made = b2CreateCircleShape(body, &def, &circle); break;
+    case b2_capsuleShape: made = b2CreateCapsuleShape(body, &def, &capsule); break;
+    case b2_segmentShape: made = b2CreateSegmentShape(body, &def, &segment); break;
+    default: made = b2CreatePolygonShape(body, &def, &polygon); break;
+    }
+    return b2StoreShapeId(made);
+}
+
 void b2Glue_ShapeSetRollingResistance(uint64_t shapeIdRaw, float rollingResistance) {
     b2ShapeId id = shapeOf(shapeIdRaw);
     b2SurfaceMaterial material = b2Shape_GetSurfaceMaterial(id);

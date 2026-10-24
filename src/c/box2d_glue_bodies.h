@@ -23,6 +23,15 @@ B2_GLUE_EXPORT float b2Glue_GetGravityScale(uint64_t bodyIdRaw);
 B2_GLUE_EXPORT void b2Glue_SetFixedRotation(uint64_t bodyIdRaw, bool fixed);
 B2_GLUE_EXPORT bool b2Glue_GetFixedRotation(uint64_t bodyIdRaw);
 
+// Motion locks: bit 0 linear X (no translation along x), bit 1 linear Y, bit 2 angular Z (same as fixed rotation).
+// Locks can make constraints along the locked direction softer (Box2D caution).
+B2_GLUE_EXPORT void b2Glue_SetMotionLocks(uint64_t bodyIdRaw, int bits);
+B2_GLUE_EXPORT int b2Glue_GetMotionLocks(uint64_t bodyIdRaw);
+
+// Bullet: continuous collision against other dynamic bodies, for fast small bodies. Off by default.
+B2_GLUE_EXPORT void b2Glue_SetBullet(uint64_t bodyIdRaw, bool bullet);
+B2_GLUE_EXPORT bool b2Glue_IsBullet(uint64_t bodyIdRaw);
+
 // Mass data: out4 / in4 are mass, centerX, centerY, rotationalInertia.
 B2_GLUE_EXPORT void b2Glue_GetMassData(uint64_t bodyIdRaw, float* out4);
 B2_GLUE_EXPORT void b2Glue_SetMassData(uint64_t bodyIdRaw, const float* in4);

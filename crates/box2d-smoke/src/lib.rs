@@ -1,9 +1,21 @@
 //! Runs Box2D inside a plain wasm32-unknown-unknown module: drop boxes/balls on a floor, step,
 //! test contacts, snapshot, restore, and raycast. `run` returns 0 when everything holds,
-//! or a code naming the failed check.
+//! or a code naming the failed check. Each section has its own range: shapes 100s, joints 200s, queries 300s, bodies 400s,
+//! filters 500s (section base + the check's own code, which is below 100). `run` itself uses 1 to 7.
 use box2d_sys::joints as jt;
 use box2d_sys::*;
 use box2d_sys::{bodies as bd, filters as fl};
+
+// First failure-code of each section. A section returns its own code (1 to 99); the exports add the base.
+const SHAPES_BASE: i32 = 100;
+const JOINTS_BASE: i32 = 200;
+const QUERIES_BASE: i32 = 300;
+const BODIES_BASE: i32 = 400;
+const FILTERS_BASE: i32 = 500;
+
+fn ranged(base: i32, code: i32) -> i32 {
+    if code == 0 { 0 } else { base + code }
+}
 
 fn build() -> (World, Vec<Body>) {
     unsafe {
@@ -205,6 +217,55 @@ fn properties() -> i32 {
     0
 }
 
+// A solid platform turned into a sensor lets a ball fall through and reports the overlap; turned back, it is solid again.
+fn sensor_toggle() -> i32 {
+    unsafe {
+        let w = b2Glue_CreateWorld(0.0, -10.0, 0, 0);
+        let platform = body_at(w, BODY_STATIC, [0.0, 0.0, 0.0], ZERO3);
+        let solid = b2Glue_AddBox(platform, 5.0, 0.5, 1.0, 0.5, 0.0, 0);
+        let ball = body_at(w, BODY_DYNAMIC, [0.0, 3.0, 0.0], ZERO3);
+        b2Glue_AddCircle(ball, 0.5, 1.0, 0.5, 0.0, 0);
+        step(w, 120);
+        if (position(ball)[1] - 1.0).abs() > 0.05 {
+            return 70; // ball should rest on the solid platform
+        }
+        if sh::set_sensor(solid, false) != Some(solid) {
+            return 71; // no change: same id
+        }
+        let Some(sensor) = sh::set_sensor(solid, true) else { return 72 };
+        if !sh::is_sensor(sensor) || b2Glue_ShapeIsValid(solid) {
+            return 73;
+        }
+        if (sh::friction(sensor) - 0.5).abs() > 1e-6 || (sh::density(sensor) - 1.0).abs() > 1e-6 {
+            return 74; // material and density carried over
+        }
+        let mut events = 0;
+        let mut buf = vec![0u64; 2 * 16];
+        for _ in 0..120 {
+            b2Glue_Step(w, 1.0 / 60.0, 4);
+            events += b2Glue_SensorBeginEvents(w, buf.as_mut_ptr(), 16);
+        }
+        if position(ball)[1] > -5.0 {
+            return 75; // ball should fall through a sensor
+        }
+        if events == 0 {
+            return 76; // overlap was reported
+        }
+        let Some(back) = sh::set_sensor(sensor, false) else { return 77 };
+        if sh::is_sensor(back) {
+            return 78;
+        }
+        let ball2 = body_at(w, BODY_DYNAMIC, [0.0, 3.0, 0.0], ZERO3);
+        b2Glue_AddCircle(ball2, 0.5, 1.0, 0.5, 0.0, 0);
+        step(w, 120);
+        if (position(ball2)[1] - 1.0).abs() > 0.05 {
+            return 79; // solid again
+        }
+        b2Glue_DestroyWorld(w);
+    }
+    0
+}
+
 // Ball rolling right on the floor at 5 m/s (angular velocity -v / r). Returns its speed after 2 s.
 fn roll_speed(rolling: f32) -> Result<f32, i32> {
     unsafe {
@@ -273,7 +334,7 @@ fn tangent_speed() -> i32 {
 }
 
 fn shapes() -> i32 {
-    for check in [rounded_polygon, chain_loop, chain_one_sided, properties, rolling_resistance, tangent_speed] {
+    for check in [rounded_polygon, chain_loop, chain_one_sided, properties, rolling_resistance, tangent_speed, sensor_toggle] {
         let code = check();
         if code != 0 {
             return code;
@@ -285,13 +346,13 @@ fn shapes() -> i32 {
 /// Runs only the shapes checks, so test/shapes.mjs can call them alone.
 #[no_mangle]
 pub extern "C" fn run_shapes() -> i32 {
-    shapes()
+    ranged(SHAPES_BASE, shapes())
 }
 
 // Joint checks: each returns 0 when it passes, or the code of the check that failed (10 to 19; 39 is the revolute
 // limit overshoot, so the kind-mismatch 10 and the overshoot are told apart).
 fn joints() -> i32 {
-    for check in [joint_revolute_limit, joint_revolute_motor, joint_prismatic_limit, joint_prismatic_spring, joint_distance_spring, joint_wheel_limit, joint_wheel_motor, joint_mouse, joint_filter, joint_reaction] {
+    for check in [joint_revolute_limit, joint_revolute_motor, joint_prismatic_limit, joint_prismatic_spring, joint_distance_spring, joint_wheel_limit, joint_wheel_motor, joint_wheel_drift, joint_mouse, joint_mouse_drag, joint_filter, joint_reaction] {
         let code = check();
         if code != 0 {
             return code;
@@ -302,7 +363,7 @@ fn joints() -> i32 {
 
 #[no_mangle]
 pub extern "C" fn run_joints() -> i32 {
-    joints()
+    ranged(JOINTS_BASE, joints())
 }
 
 fn joint_world(gravity_y: f32) -> World {
@@ -511,6 +572,90 @@ fn joint_mouse() -> i32 {
 }
 
 // Filter: a box joined to the floor by a filter joint falls through it. Without the joint it rests on the floor.
+// Wheel joint on a static chassis, motor spinning at 20 rad/s for 10 s, axis along x. Board issue "wheel drifts off its line":
+// reproduced and it is not drift. With the anchor at the wheel centre the wheel stays on the line (error below 1e-3 m, even under
+// gravity). With the anchor off-centre the centre orbits the anchor (geometry, not an error); the anchor itself stays within
+// a few millimetres of the line (the solver's soft perpendicular constraint, upstream wheel_joint.c) and does not grow.
+fn wheel_anchor_error(anchor_b: [f32; 2], gravity_y: f32) -> (f32, f32) {
+    let w = joint_world(gravity_y);
+    let base = joint_static(w, 0.0, 0.0);
+    let wheel_body = joint_box(w, 0.0, 0.0, 0.5);
+    let def = jt::WheelDef { axis: [1.0, 0.0], anchor_b, motor: Some((20.0, 1000.0)), ..Default::default() };
+    jt::create_wheel(w, base, wheel_body, &def);
+    let (mut first, mut second) = (0.0f32, 0.0f32);
+    for i in 0..600 {
+        joint_steps(w, 1);
+        let t = joint_pose(wheel_body);
+        let (c, s) = (t[2].cos(), t[2].sin());
+        let anchor_y = t[1] + s * anchor_b[0] + c * anchor_b[1];
+        if i < 300 { first = first.max(anchor_y.abs()) } else { second = second.max(anchor_y.abs()) }
+    }
+    unsafe { b2Glue_DestroyWorld(w) };
+    (first, second)
+}
+
+fn joint_wheel_drift() -> i32 {
+    let (a, b) = wheel_anchor_error([0.0, 0.0], -10.0);
+    if a.max(b) > 1e-3 {
+        return 45; // centred anchor must stay on the line
+    }
+    let (a, b) = wheel_anchor_error([0.3, 0.0], -10.0);
+    if a.max(b) > 0.02 {
+        return 46; // off-centre anchor: a few millimetres at most
+    }
+    if b > a * 1.5 + 1e-4 {
+        return 47; // and it does not grow with time
+    }
+    0
+}
+
+// Mouse against a moving target (a drag): the body follows a trail of target moves; the spring force is capped by max
+// force, so a heavy body with a weak mouse cannot keep up; and the motor joint has no angular drive, so a pull away from
+// the centre spins the body (Box2D 3.2 has no mouse joint, see README).
+fn joint_mouse_drag() -> i32 {
+    // Trail: the pulled point visits (1,0), (1,2), (-1,2), (-1,0), 60 steps each.
+    let w = joint_world(0.0);
+    let ground = joint_static(w, 0.0, 0.0);
+    let body = joint_box(w, 0.0, 0.0, 0.5);
+    let mouse = jt::create_mouse(w, ground, body, [0.0, 0.0], [0.0, 0.0], 1000.0, 5.0, 0.8);
+    for target in [[1.0, 0.0], [1.0, 2.0], [-1.0, 2.0], [-1.0, 0.0]] {
+        if !jt::mouse_set_target(mouse, target) {
+            return 41;
+        }
+        joint_steps(w, 90);
+        let p = joint_pose(body);
+        if (p[0] - target[0]).abs() > 0.1 || (p[1] - target[1]).abs() > 0.1 {
+            return 42; // body did not follow the target
+        }
+    }
+    unsafe { b2Glue_DestroyWorld(w) };
+
+    // Force cap: mass 16 (half 2), max force 5 N, target 4 m away. Within 1 s it can move at most about 0.5 * 0.3 * 1 m.
+    let w = joint_world(0.0);
+    let ground = joint_static(w, 0.0, 0.0);
+    let heavy = joint_box(w, 0.0, 0.0, 2.0);
+    jt::create_mouse(w, ground, heavy, [4.0, 0.0], [0.0, 0.0], 5.0, 5.0, 0.8);
+    joint_steps(w, 60);
+    let x = joint_pose(heavy)[0];
+    if !(x > 0.0 && x < 0.5) {
+        return 43; // the cap must hold it back
+    }
+    unsafe { b2Glue_DestroyWorld(w) };
+
+    // No angular drive: pulling an off-centre point sideways turns the body.
+    let w = joint_world(0.0);
+    let ground = joint_static(w, 0.0, 0.0);
+    let body = joint_box(w, 0.0, 0.0, 0.5);
+    jt::create_mouse(w, ground, body, [0.5, 3.0], [0.5, 0.0], 1000.0, 5.0, 0.8);
+    joint_steps(w, 120);
+    let angle = joint_pose(body)[2].abs();
+    unsafe { b2Glue_DestroyWorld(w) };
+    if angle < 0.1 {
+        return 44;
+    }
+    0
+}
+
 fn joint_filter() -> i32 {
     let w = joint_world(-10.0);
     let floor = joint_static(w, 0.0, 0.0);
@@ -872,6 +1017,64 @@ fn bodies() -> i32 {
             }
         }
         b2Glue_DestroyWorld(w);
+
+        // Motion locks: a body locked along y does not fall, one locked along x ignores a sideways push, and the angular
+        // lock is the same as fixed rotation.
+        let w = b2Glue_CreateWorld(0.0, -10.0, 0, 0);
+        let free = dynamic_body(w, 0.0, 10.0);
+        let no_y = dynamic_body(w, 5.0, 10.0);
+        let no_x = dynamic_body(w, 10.0, 10.0);
+        for b in [free, no_y, no_x] {
+            b2Glue_AddBox(b, 0.5, 0.5, 1.0, 0.5, 0.0, 0);
+        }
+        bd::set_motion_locks(no_y, bd::MotionLocks { linear_y: true, ..Default::default() });
+        bd::set_motion_locks(no_x, bd::MotionLocks { linear_x: true, angular_z: true, ..Default::default() });
+        if bd::motion_locks(no_y) != (bd::MotionLocks { linear_x: false, linear_y: true, angular_z: false })
+            || bd::motion_locks(free) != bd::MotionLocks::default()
+        {
+            return 80;
+        }
+        if !bd::is_fixed_rotation(no_x) || bd::is_fixed_rotation(no_y) {
+            return 81;
+        }
+        b2Glue_SetLinearVelocity(no_x, 4.0, 0.0);
+        b2Glue_SetLinearVelocity(free, 4.0, 0.0);
+        for _ in 0..30 {
+            b2Glue_Step(w, 1.0 / 60.0, 4);
+        }
+        if (position(no_y)[1] - 10.0).abs() > 1e-3 || position(free)[1] > 9.5 {
+            return 82; // y lock holds, the free body falls
+        }
+        if (position(no_x)[0] - 10.0).abs() > 1e-3 || position(free)[0] < 1.5 {
+            return 83; // x lock holds, the free body drifts
+        }
+        b2Glue_DestroyWorld(w);
+
+        // Bullet: a fast ball and a thin heavy dynamic wall. Without the flag the ball skips through the wall in one step
+        // (no continuous collision between dynamic bodies); with it the ball stops against the wall.
+        for bullet in [false, true] {
+            let w = b2Glue_CreateWorld(0.0, 0.0, 0, 1);
+            let ball = dynamic_body(w, 0.0, 0.0);
+            b2Glue_AddCircle(ball, 0.1, 1.0, 0.0, 0.0, 0);
+            let wall = dynamic_body(w, 5.0, 0.0);
+            b2Glue_AddBox(wall, 0.05, 2.0, 1000.0, 0.0, 0.0, 0);
+            bd::set_bullet(ball, bullet);
+            if bd::is_bullet(ball) != bullet {
+                return 90;
+            }
+            b2Glue_SetLinearVelocity(ball, 600.0, 0.0);
+            for _ in 0..3 {
+                b2Glue_Step(w, 1.0 / 60.0, 4);
+            }
+            let (bx, wx) = (position(ball)[0], position(wall)[0]);
+            if bullet && bx > wx {
+                return 91; // bullet went through
+            }
+            if !bullet && bx < wx {
+                return 92; // without bullet the ball tunnels
+            }
+            b2Glue_DestroyWorld(w);
+        }
     }
     0
 }
@@ -938,25 +1141,25 @@ fn filters() -> i32 {
 
 #[no_mangle]
 pub extern "C" fn run_queries() -> i32 {
-    queries()
+    ranged(QUERIES_BASE, queries())
 }
 
 #[no_mangle]
 pub extern "C" fn run_bodies() -> i32 {
-    bodies()
+    ranged(BODIES_BASE, bodies())
 }
 
 #[no_mangle]
 pub extern "C" fn run_filters() -> i32 {
-    filters()
+    ranged(FILTERS_BASE, filters())
 }
 
 #[no_mangle]
 pub extern "C" fn run() -> i32 {
-    for section in [shapes, joints, queries, bodies, filters] {
+    for (base, section) in [(SHAPES_BASE, shapes as fn() -> i32), (JOINTS_BASE, joints), (QUERIES_BASE, queries), (BODIES_BASE, bodies), (FILTERS_BASE, filters)] {
         let code = section();
         if code != 0 {
-            return code;
+            return ranged(base, code);
         }
     }
     let (w, ids) = build();

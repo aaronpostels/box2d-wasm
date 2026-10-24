@@ -162,6 +162,16 @@ export interface ShapeFilter {
     groupIndex: number;
 }
 
+/** Which motions of a body are locked. */
+export interface MotionLocks {
+    /** No translation along x. */
+    linearX: boolean;
+    /** No translation along y. */
+    linearY: boolean;
+    /** No rotation (same as fixed rotation). */
+    angularZ: boolean;
+}
+
 export interface MassData {
     mass: number;
     center: Vec2Tuple;
@@ -306,6 +316,7 @@ export interface RawBox2DModule {
     _b2Glue_ShapeSetDensity(shapeId: bigint, density: number, updateBodyMass: boolean | number): void;
     _b2Glue_ShapeDensity(shapeId: bigint): number;
     _b2Glue_ShapeIsSensor(shapeId: bigint): number;
+    _b2Glue_ShapeSetSensor(shapeId: bigint, sensor: boolean | number): bigint;
     _b2Glue_ShapeSetRollingResistance(shapeId: bigint, rollingResistance: number): void;
     _b2Glue_ShapeRollingResistance(shapeId: bigint): number;
     _b2Glue_ShapeSetTangentSpeed(shapeId: bigint, tangentSpeed: number): void;
@@ -325,6 +336,10 @@ export interface RawBox2DModule {
     _b2Glue_SetGravityScale(bodyId: bigint, scale: number): void;
     _b2Glue_GetGravityScale(bodyId: bigint): number;
     _b2Glue_SetFixedRotation(bodyId: bigint, fixed: boolean | number): void;
+    _b2Glue_SetMotionLocks(bodyId: bigint, bits: number): void;
+    _b2Glue_GetMotionLocks(bodyId: bigint): number;
+    _b2Glue_SetBullet(bodyId: bigint, bullet: boolean | number): void;
+    _b2Glue_IsBullet(bodyId: bigint): number;
     _b2Glue_GetFixedRotation(bodyId: bigint): number;
     _b2Glue_GetMassData(bodyId: bigint, out4: number): void;
     _b2Glue_SetMassData(bodyId: bigint, in4: number): void;

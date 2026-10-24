@@ -12,6 +12,7 @@ extern "C" {
     pub fn b2Glue_ShapeSetDensity(shape: Shape, density: f32, update_body_mass: bool);
     pub fn b2Glue_ShapeDensity(shape: Shape) -> f32;
     pub fn b2Glue_ShapeIsSensor(shape: Shape) -> bool;
+    pub fn b2Glue_ShapeSetSensor(shape: Shape, sensor: bool) -> Shape;
     pub fn b2Glue_ShapeSetRollingResistance(shape: Shape, rolling_resistance: f32);
     pub fn b2Glue_ShapeRollingResistance(shape: Shape) -> f32;
     pub fn b2Glue_ShapeSetTangentSpeed(shape: Shape, tangent_speed: f32);
@@ -62,6 +63,15 @@ pub fn set_density(shape: Shape, density: f32, update_body_mass: bool) {
 pub fn is_sensor(shape: Shape) -> bool {
     debug_assert!(shape_is_valid(shape));
     unsafe { b2Glue_ShapeIsSensor(shape) }
+}
+
+/// Turns a shape into a sensor or back. Box2D has no runtime setter, so the glue makes the shape again: the old id is dead,
+/// the returned id is the new shape (last in the body's list). The same id comes back when nothing had to change; None for
+/// chain segments, which cannot be sensors.
+pub fn set_sensor(shape: Shape, sensor: bool) -> Option<Shape> {
+    debug_assert!(shape_is_valid(shape));
+    let id = unsafe { b2Glue_ShapeSetSensor(shape, sensor) };
+    (id != 0).then_some(id)
 }
 
 pub fn rolling_resistance(shape: Shape) -> f32 {

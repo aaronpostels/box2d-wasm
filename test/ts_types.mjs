@@ -75,7 +75,7 @@ const usage = `
 import {
   Box2DWorld, BodyType, JointType,
   type RawBox2DModule, type BodyId, type ShapeId, type JointId, type ChainId,
-  type ShapeFilter, type MassData, type QueryHit, type OverlapResult, type RayAllResult, type JointReaction,
+  type ShapeFilter, type MassData, type MotionLocks, type QueryHit, type OverlapResult, type RayAllResult, type JointReaction,
   type JointTypeValue, type Vec2Tuple
 } from "../../../src/ts/index.js";
 
@@ -114,6 +114,10 @@ w.setAngularDamping(body, w.getAngularDamping(body));
 w.setGravityScale(body, w.getGravityScale(body));
 const fixed: boolean = w.isFixedRotation(body);
 w.setFixedRotation(body, fixed);
+const locks: MotionLocks = w.getMotionLocks(body);
+w.setMotionLocks(body, locks);
+w.setBullet(body, w.isBullet(body));
+const sensorShape: ShapeId | null = w.setShapeSensor(shape, true);
 const mass: MassData = w.getMassData(body);
 w.setMassData(body, mass);
 const userData: number = w.getBodyUserData(body);

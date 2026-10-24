@@ -10,6 +10,10 @@ extern "C" {
     pub fn b2Glue_GetGravityScale(body: Body) -> f32;
     pub fn b2Glue_SetFixedRotation(body: Body, fixed: bool);
     pub fn b2Glue_GetFixedRotation(body: Body) -> bool;
+    pub fn b2Glue_SetMotionLocks(body: Body, bits: i32);
+    pub fn b2Glue_GetMotionLocks(body: Body) -> i32;
+    pub fn b2Glue_SetBullet(body: Body, bullet: bool);
+    pub fn b2Glue_IsBullet(body: Body) -> bool;
     pub fn b2Glue_GetMassData(body: Body, out4: *mut f32);
     pub fn b2Glue_SetMassData(body: Body, in4: *const f32);
     pub fn b2Glue_SetBodyUserData(body: Body, value: u32);
@@ -61,6 +65,34 @@ pub fn set_fixed_rotation(body: Body, fixed: bool) {
 
 pub fn is_fixed_rotation(body: Body) -> bool {
     unsafe { b2Glue_GetFixedRotation(body) }
+}
+
+/// Which motions are locked: no translation along x, none along y, no rotation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub struct MotionLocks {
+    pub linear_x: bool,
+    pub linear_y: bool,
+    pub angular_z: bool,
+}
+
+/// Replaces all three locks at once. Locked directions can make constraints along them softer.
+pub fn set_motion_locks(body: Body, locks: MotionLocks) {
+    let bits = (locks.linear_x as i32) | (locks.linear_y as i32) << 1 | (locks.angular_z as i32) << 2;
+    unsafe { b2Glue_SetMotionLocks(body, bits) }
+}
+
+pub fn motion_locks(body: Body) -> MotionLocks {
+    let bits = unsafe { b2Glue_GetMotionLocks(body) };
+    MotionLocks { linear_x: bits & 1 != 0, linear_y: bits & 2 != 0, angular_z: bits & 4 != 0 }
+}
+
+/// Continuous collision against other dynamic bodies, for fast small bodies. The world needs continuous enabled.
+pub fn set_bullet(body: Body, bullet: bool) {
+    unsafe { b2Glue_SetBullet(body, bullet) }
+}
+
+pub fn is_bullet(body: Body) -> bool {
+    unsafe { b2Glue_IsBullet(body) }
 }
 
 pub fn mass_data(body: Body) -> MassData {

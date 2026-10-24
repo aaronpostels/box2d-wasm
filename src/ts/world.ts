@@ -28,6 +28,7 @@ import {
     ChainShapeOptions,
     ShapeFilter,
     MassData,
+    MotionLocks,
     QueryHit,
     OverlapResult,
     RayAllResult,
@@ -561,6 +562,16 @@ export class Box2DWorld {
     }
 
     /** Box2D fixes the sensor flag at creation, so there is no setter. */
+    /**
+     * Turns a shape into a sensor or back. Box2D has no runtime setter, so the glue makes the shape again: the old id is
+     * dead and the returned id is the new shape. Same id when nothing changes; null for chain segments (cannot be sensors).
+     */
+    public setShapeSensor(shapeId: ShapeId, sensor: boolean): ShapeId | null {
+        this.checkDestroyed();
+        const id = this.wasm._b2Glue_ShapeSetSensor(shapeId, sensor);
+        return id === 0n ? null : id;
+    }
+
     public isShapeSensor(shapeId: ShapeId): boolean {
         this.checkDestroyed();
         return this.wasm._b2Glue_ShapeIsSensor(shapeId) !== 0;
@@ -687,6 +698,29 @@ export class Box2DWorld {
     public setFixedRotation(bodyId: BodyId, fixed: boolean): void {
         this.checkDestroyed();
         this.wasm._b2Glue_SetFixedRotation(bodyId, fixed);
+    }
+
+    /** Locks translation along x and y and rotation independently. Locked directions can make constraints softer. */
+    public setMotionLocks(bodyId: BodyId, locks: MotionLocks): void {
+        this.checkDestroyed();
+        this.wasm._b2Glue_SetMotionLocks(bodyId, (locks.linearX ? 1 : 0) | (locks.linearY ? 2 : 0) | (locks.angularZ ? 4 : 0));
+    }
+
+    public getMotionLocks(bodyId: BodyId): MotionLocks {
+        this.checkDestroyed();
+        const bits = this.wasm._b2Glue_GetMotionLocks(bodyId);
+        return { linearX: (bits & 1) !== 0, linearY: (bits & 2) !== 0, angularZ: (bits & 4) !== 0 };
+    }
+
+    /** Continuous collision against other dynamic bodies, for fast small bodies. The world needs continuous collision on. */
+    public setBullet(bodyId: BodyId, bullet: boolean): void {
+        this.checkDestroyed();
+        this.wasm._b2Glue_SetBullet(bodyId, bullet);
+    }
+
+    public isBullet(bodyId: BodyId): boolean {
+        this.checkDestroyed();
+        return this.wasm._b2Glue_IsBullet(bodyId) !== 0;
     }
 
     public getMassData(bodyId: BodyId): MassData {

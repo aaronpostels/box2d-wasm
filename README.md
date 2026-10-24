@@ -24,9 +24,18 @@ Box2D tracks its `main` branch: a daily GitHub Actions job pulls upstream, build
 | Body damping, gravity scale, fixed rotation, mass data, user data, enable/disable, batch impulses, shape filters (Rust smoke tested; TypeScript wrapper methods added, run by `test/ts_wrapper.mjs` after the build) | done |
 | Exact world snapshot and in-place restore (continues bit for bit) | done |
 | Deterministic state hash (`b2World_GetStateHash`) | done |
-| Shapes: rounded polygons, chain loops and one-sided chains, friction / restitution / density get and set, rolling resistance, tangent speed (sensor flag readable, not settable: Box2D fixes it at creation) | done (Rust smoke; TypeScript wrapper `createChainShape`, property get/set, `getShapeRadius`, `setShapeFilter` / `getShapeFilter`; JS test needs an Emscripten build) |
-| SIMD and scalar builds | tested |
+| Shapes: rounded polygons, chain loops and one-sided chains, friction / restitution / density get and set, rolling resistance, tangent speed (`setShapeSensor` flips the sensor flag by making the shape again: the shape id changes) | done (Rust smoke; TypeScript wrapper `createChainShape`, property get/set, `getShapeRadius`, `setShapeFilter` / `getShapeFilter`; JS test needs an Emscripten build) |
+| Motion locks (linear x, linear y, angular z) and bullet flag | done (`test/bodies.mjs`; wrapper `setMotionLocks`, `setBullet`) |
+| SIMD and scalar builds | tested; `node scripts/audit_simd.mjs <wasm> --min N / --max N` counts v128 instructions (CI runs it) |
 | Worker threads | Rust crate on a Rayon pool (`use_rayon`); threaded WASM build with Emscripten pthreads. Gap: the JS wrapper has no task-system call, so the threaded build steps Box2D on one thread. `b2Glue_SetTaskSystem` needs C-side task callbacks that run on the pthread pool; the JS side cannot supply function pointers without a glue change |
+
+## Limits
+
+- **Mouse joint.** Box2D 3.2 removed it. `createMouseJoint` is a motor joint with a linear spring and no velocity motor: the anchor on body B is pulled to the target (move it with `setMouseJointTarget`, which wakes the bodies), the pull is capped by `maxForce`, and there is no angular drive, so a pull on an off-centre point also spins the body. Tested against a trail of target moves, the force cap and the spin (`test/joints.mjs`, smoke `joint_mouse_drag`).
+- **Sensor flag.** No runtime setter in Box2D. `setShapeSensor` destroys the shape and makes it again with the same geometry, material, filter, density, event flags and user data, and returns the new id. It is last in the body's shape list. Chain segments cannot be sensors.
+- **Wheel joint spinning on a static chassis.** No drift: with the anchor at the wheel centre the wheel stays on its line to under 1 mm for 10 s at 20 rad/s. With an off-centre anchor the wheel's centre orbits the anchor (geometry) and the anchor stays within a few millimetres of the line (the solver's soft perpendicular constraint, `wheel_joint.c`); the error does not grow.
+- **User data** is 32-bit (a wasm32 pointer).
+- **Locks** can make constraints along a locked direction softer (Box2D's own warning).
 
 ## JS / TS
 

@@ -10,7 +10,7 @@ const smokeWasm = new URL("../crates/box2d-smoke/target/wasm32-unknown-unknown/r
 const smoke = new WebAssembly.Instance(new WebAssembly.Module(readFileSync(smokeWasm)), {}).exports;
 const smokeCode = smoke.run_joints();
 assert.equal(smokeCode, 0, `joints smoke check failed with code ${smokeCode}`);
-console.log("ok joints smoke: kinds, revolute limit and motor, prismatic, distance, wheel, mouse, filter, reaction");
+console.log("ok joints smoke: kinds, revolute limit and motor, prismatic, distance, wheel, wheel drift, mouse, mouse drag, filter, reaction");
 
 const entry = new URL("../dist/box2d.js", import.meta.url);
 if (!existsSync(fileURLToPath(entry))) {
@@ -101,6 +101,35 @@ function vec2(x, y) {
   const y = pose(weight)[1];
   assert.ok(y > 7.85 && y < 7.99, `spring sag, got ${y}`);
   m._b2Glue_DestroyWorld(w);
+}
+
+// Wheel drift probe (board issue: wheel on a static chassis drifts when spinning). A motor spins the wheel at 20 rad/s for 10 s
+// with the axis along x. Centred anchor: the wheel stays on the line. Off-centre anchor: the centre orbits the anchor (geometry),
+// the anchor stays within a few millimetres of the line (soft perpendicular constraint in upstream wheel_joint.c), no growth.
+{
+  const anchorError = (anchorB, gravityY) => {
+    const w = world(gravityY);
+    const ground = body(w, BODY_STATIC, 0, 0);
+    const b = box(w, BODY_DYNAMIC, 0, 0, 0.5);
+    const zero = vec2(0, 0);
+    m._b2Glue_CreateWheel(w, ground, b, zero, vec2(anchorB[0], anchorB[1]), vec2(1, 0), 0, 0, 0, 0, 0, 0, 1, 20, 1000);
+    let first = 0;
+    let second = 0;
+    for (let i = 0; i < 600; i++) {
+      steps(w, 1);
+      const t = pose(b);
+      const ay = t[1] + Math.sin(t[2]) * anchorB[0] + Math.cos(t[2]) * anchorB[1];
+      if (i < 300) first = Math.max(first, Math.abs(ay));
+      else second = Math.max(second, Math.abs(ay));
+    }
+    m._b2Glue_DestroyWorld(w);
+    return [first, second];
+  };
+  const [c1, c2] = anchorError([0, 0], -10);
+  assert.ok(Math.max(c1, c2) < 1e-3, `centred wheel anchor stays on the line, got ${c1} ${c2}`);
+  const [o1, o2] = anchorError([0.3, 0], -10);
+  assert.ok(Math.max(o1, o2) < 0.02, `off-centre anchor within a few mm, got ${o1} ${o2}`);
+  assert.ok(o2 <= o1 * 1.5 + 1e-4, `anchor error does not grow: ${o1} then ${o2}`);
 }
 
 // Mouse: the pulled point follows the target, the target can move, and the setter refuses other kinds.
