@@ -16,7 +16,7 @@ permissions:
 jobs:
   build:
     name: Compile WASM and TypeScript
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     outputs:
@@ -93,7 +93,7 @@ jobs:
 
   rust:
     name: Rust crate on wasm32-unknown-unknown
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
@@ -123,7 +123,7 @@ jobs:
     name: Commit Upstream Submodule Updates
     needs: build
     if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && needs.build.outputs.submodule-changed == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
 
