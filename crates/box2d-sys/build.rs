@@ -31,23 +31,33 @@ fn main() {
             b.flag("-matomics").flag("-mbulk-memory");
         }
     }
-    if !wasm {
-        b.define("BOX2D_DISABLE_AVX2", None);
-    }
     if std::env::var("BOX2D_SCALAR").is_ok() {
         b.define("BOX2D_DISABLE_SIMD", None);
     }
 
     let mut timer = b.clone();
     let mut platform = b.clone();
+    // Upstream picks the 8-wide solver by file: contact_solver_w8.c needs AVX2. clang and gcc enable it for that file with a target
+    // attribute, but MSVC needs the flag, so that one file builds on its own with /arch:AVX2 (every other file stays SSE2).
+    let mut avx2 = b.clone();
+    let msvc = b.get_compiler().is_like_msvc();
+    let mut has_avx2_file = false;
     for entry in std::fs::read_dir(box2d.join("src")).unwrap() {
         let p = entry.unwrap().path();
         if p.extension().map_or(false, |e| e == "c") {
             if wasm && p.file_name().map_or(false, |n| n == "timer.c") {
                 continue;
             }
+            if msvc && !wasm && p.file_name().map_or(false, |n| n == "contact_solver_w8.c") {
+                avx2.flag("/arch:AVX2").file(p);
+                has_avx2_file = true;
+                continue;
+            }
             b.file(p);
         }
+    }
+    if has_avx2_file {
+        avx2.compile("box2d_avx2");
     }
     if wasm {
         for name in ["CreateMutex", "DestroyMutex", "LockMutex", "UnlockMutex", "CreateSemaphore", "DestroySemaphore", "WaitSemaphore", "SignalSemaphore"] {
