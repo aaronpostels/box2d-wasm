@@ -62,7 +62,7 @@ uint64_t b2Glue_StateHash(uint32_t worldIdRaw) {
 }
 
 // Serial task callbacks: what Box2D installs for a world with one worker. Box2D's own copies are static, so the glue keeps its own.
-static void* b2GlueSerialEnqueue(b2TaskCallback* task, void* taskContext, void* userContext) {
+static void* b2GlueSerialEnqueue(b2TaskCallbackFcn* task, void* taskContext, void* userContext) {
     (void)userContext;
     task(taskContext);
     return NULL;
@@ -73,7 +73,7 @@ static void b2GlueSerialFinish(void* userTask, void* userContext) {
     (void)userContext;
 }
 
-void b2Glue_SetTaskSystem(uint32_t worldIdRaw, int workers, b2EnqueueTaskCallback* enqueue, b2FinishTaskCallback* finish) {
+void b2Glue_SetTaskSystem(uint32_t worldIdRaw, int workers, b2EnqueueTaskCallbackFcn* enqueue, b2FinishTaskCallbackFcn* finish) {
     b2WorldId id = worldOf(worldIdRaw);
     b2World* w = b2GetWorldFromId(id);
     if (w == NULL) return;
@@ -577,7 +577,7 @@ int b2Glue_SnapshotTake(uint32_t worldIdRaw, uint8_t* outBuffer, int capacity) {
 }
 
 bool b2Glue_SnapshotRestore(uint32_t worldIdRaw, const uint8_t* buffer, int size) {
-    return b2World_Restore(worldOf(worldIdRaw), buffer, size);
+    return b2World_RestoreFromSnapshot(worldOf(worldIdRaw), buffer, size);
 }
 
 uint32_t b2Glue_SnapshotCreateWorld(const uint8_t* buffer, int size, int workerCount) {

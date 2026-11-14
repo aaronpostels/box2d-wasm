@@ -91,7 +91,7 @@ int b2Glue_JointSetLimits(uint64_t jointIdRaw, float lower, float upper) {
     case b2_revoluteJoint: b2RevoluteJoint_SetLimits(j, lower, upper); return 1;
     case b2_prismaticJoint: b2PrismaticJoint_SetLimits(j, lower, upper); return 1;
     case b2_wheelJoint: b2WheelJoint_SetLimits(j, lower, upper); return 1;
-    case b2_distanceJoint: b2DistanceJoint_SetLengthRange(j, lower, upper); return 1;
+    case b2_distanceJoint: b2DistanceJoint_SetLimits(j, lower, upper); return 1;
     default: return 0;
     }
 }
@@ -161,19 +161,19 @@ int b2Glue_JointSetMotor(uint64_t jointIdRaw, float speed, float maxForce) {
     if (!b2Joint_IsValid(j)) return 0;
     switch (b2Joint_GetType(j)) {
     case b2_revoluteJoint:
-        b2RevoluteJoint_SetMotorSpeed(j, speed);
+        b2RevoluteJoint_SetTargetMotorSpeed(j, speed);
         b2RevoluteJoint_SetMaxMotorTorque(j, maxForce);
         return 1;
     case b2_prismaticJoint:
-        b2PrismaticJoint_SetMotorSpeed(j, speed);
+        b2PrismaticJoint_SetTargetMotorSpeed(j, speed);
         b2PrismaticJoint_SetMaxMotorForce(j, maxForce);
         return 1;
     case b2_wheelJoint:
-        b2WheelJoint_SetMotorSpeed(j, speed);
+        b2WheelJoint_SetTargetMotorSpeed(j, speed);
         b2WheelJoint_SetMaxMotorTorque(j, maxForce);
         return 1;
     case b2_distanceJoint:
-        b2DistanceJoint_SetMotorSpeed(j, speed);
+        b2DistanceJoint_SetTargetMotorSpeed(j, speed);
         b2DistanceJoint_SetMaxMotorForce(j, maxForce);
         return 1;
     default: return 0;

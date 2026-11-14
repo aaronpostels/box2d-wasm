@@ -30,7 +30,7 @@ B2_GLUE_EXPORT void b2Glue_SetGravity(uint32_t worldIdRaw, float gx, float gy);
 B2_GLUE_EXPORT void b2Glue_Configure(uint32_t worldIdRaw, bool sleeping, bool continuous);
 B2_GLUE_EXPORT void b2Glue_SetContactTuning(uint32_t worldIdRaw, float hertz, float dampingRatio, float pushSpeed);
 B2_GLUE_EXPORT uint64_t b2Glue_StateHash(uint32_t worldIdRaw);
-B2_GLUE_EXPORT void b2Glue_SetTaskSystem(uint32_t worldIdRaw, int workers, b2EnqueueTaskCallback* enqueue, b2FinishTaskCallback* finish);
+B2_GLUE_EXPORT void b2Glue_SetTaskSystem(uint32_t worldIdRaw, int workers, b2EnqueueTaskCallbackFcn* enqueue, b2FinishTaskCallbackFcn* finish);
 B2_GLUE_EXPORT int b2Glue_WorkerCount(uint32_t worldIdRaw);
 
 // Body Management
